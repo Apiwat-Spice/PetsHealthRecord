@@ -5,7 +5,7 @@ import { Feather } from '@expo/vector-icons';
 export default function Register() {
   return (
     <ImageBackground
-      source={require('../../../assets/background-welcome.png')} 
+      source={require('../../../src/public/pictures/background-welcome.png')} 
       style={styles.background}
       resizeMode="cover"
     >
@@ -18,7 +18,7 @@ export default function Register() {
         <View style={styles.contentContainer}>
           <View style={styles.logoContainer}>
             <Image
-              source={require('../../../assets/Logo.png')}
+              source={require('../../../src/public/pictures/Logo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
