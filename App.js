@@ -1,7 +1,7 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
-
+import WelcomeScreen from "./src/screens/auth/Welcome";
 import Register from "./src/screens/auth/Register";
 import WelcomeScreen from "./src/screens/auth/Welcome";
 import LoginScreen from "./src/screens/auth/Login";
@@ -14,8 +14,8 @@ export default function AppNavigator() {
     <NavigationContainer>
       <Stack.Navigator>
         <Stack.Screen
-          name="Register"
-          component={Register}
+          name="Welcome"
+          component={WelcomeScreen}
         />
         <Stack.Screen
           name="Welcome"
