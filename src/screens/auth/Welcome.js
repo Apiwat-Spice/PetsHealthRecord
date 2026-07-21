@@ -24,7 +24,7 @@ export default function WelcomeScreen({ navigation }) {
             />
           </View>
 
-          <Text style={styles.titleWelcome}>Welcome to</Text>
+          <Text style={styles.titleWelcome}>Welcome to </Text>
           <Text style={styles.titleApp}>Digital Pet Health Record</Text>
           <Text style={styles.slogan}>
             “Take better care of your pet with everything{'\n'}you need in one place.”
