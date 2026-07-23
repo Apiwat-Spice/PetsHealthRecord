@@ -1,16 +1,16 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, ImageBackground, Image, Pressable } from 'react-native';
-import { Feather } from '@expo/vector-icons'; 
+import { Feather } from '@expo/vector-icons';
 
-export default function Register() {
+export default function Welcome({ navigation }) {
   return (
     <ImageBackground
-      source={require('../../../src/public/pictures/background-welcome.png')} 
+      source={require('../../../src/public/pictures/background-welcome.png')}
       style={styles.background}
       resizeMode="cover"
     >
       <View style={styles.container}>
-        
+
         <Pressable style={styles.infoButton}>
           <Feather name="info" size={24} color="black" />
         </Pressable>
@@ -32,11 +32,11 @@ export default function Register() {
         </View>
 
         <View style={styles.bottomBar}>
-          <Pressable 
+          <Pressable
             style={({ pressed }) => [
-              styles.button, 
+              styles.button,
               styles.buttonBorder,
-              pressed && styles.buttonPressed 
+              pressed && styles.buttonPressed
             ]}
             onPress={() => navigation.navigate("Login")}
           >
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 30,
-    paddingBottom: 60, 
+    paddingBottom: 60,
   },
   logoContainer: {
     backgroundColor: '#FFFFFF',
@@ -92,14 +92,14 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 5,
-    elevation: 3, 
+    elevation: 3,
   },
   logo: {
-    width: 150, 
+    width: 150,
     height: 130,
   },
   titleWelcome: {
-    fontSize: 40, 
+    fontSize: 40,
     fontWeight: '900',
     color: '#5A7584',
     marginBottom: 8,
@@ -135,7 +135,7 @@ const styles = StyleSheet.create({
     borderColor: '#D3D3D3',
   },
   buttonPressed: {
-    backgroundColor: '#FFFFFF', 
+    backgroundColor: '#FFFFFF',
   },
   buttonText: {
     fontSize: 18,
