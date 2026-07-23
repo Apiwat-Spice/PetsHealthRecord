@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, ImageBackground, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Checkbox from 'expo-checkbox';
-import { supabase } from '../../../server/config/supabase.js';
+// import { supabase } from '../../../server/config/supabase.js';
 
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');

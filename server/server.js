@@ -1,7 +1,15 @@
-const app = require("./app");
+const express = require("express");
+const cors = require("cors");
 
-const PORT = process.env.PORT || 3000;
+const authRoutes = require("./routes/auth");
 
-app.listen(PORT, () => {
-    console.log(`Server Running ${PORT}`);
+const app = express();
+
+app.use(cors());
+app.use(express.json());
+
+app.use("/", authRoutes);
+
+app.listen(3000, () => {
+  console.log("Server Start");
 });
