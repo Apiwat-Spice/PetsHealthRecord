@@ -18,7 +18,7 @@ const handleLogin = async () => {
   setLoading(true);
 
   try {
-    const response = await fetch("http://10.0.2.2:3000/login", {
+    const response = await fetch("http://192.168.1.188:3000/login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -32,7 +32,7 @@ const handleLogin = async () => {
     const result = await response.json();
 
     if (!response.ok) {
-      Alert.alert("เข้าสู่ระบบล้มเหลว", result.message);
+      Alert.alert("เข้าสู่ระบบล้มเหลว", result.message || "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
       return;
     }
 
@@ -41,7 +41,7 @@ const handleLogin = async () => {
     console.log(result);
 
     // ตัวอย่าง
-    // navigation.replace("Dashboard");
+    //navigation.replace("DashboardPetOwner");
 
   } catch (error) {
     console.log(error);
