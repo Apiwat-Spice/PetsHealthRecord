@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { StyleSheet, Text, View, ImageBackground, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Checkbox from 'expo-checkbox';
-// import { supabase } from '../../../server/config/supabase.js';
 
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');
@@ -10,27 +9,47 @@ export default function Login({ navigation }) {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert('แจ้งเตือน', 'กรุณากรอกอีเมลและรหัสผ่าน');
+const handleLogin = async () => {
+  if (!email || !password) {
+    Alert.alert("แจ้งเตือน", "กรุณากรอกอีเมลและรหัสผ่าน");
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const response = await fetch("http://10.0.2.2:3000/login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email,
+        password,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      Alert.alert("เข้าสู่ระบบล้มเหลว", result.message);
       return;
     }
 
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
+    Alert.alert("สำเร็จ", result.message);
 
-    if (error) {
-      Alert.alert('เข้าสู่ระบบล้มเหลว', error.message);
-    } else {
-      Alert.alert('สำเร็จ', 'เข้าสู่ระบบเรียบร้อยแล้ว!');
-      // รอใส่ navigation.replace('Dashboard')
-    }
+    console.log(result);
+
+    // ตัวอย่าง
+    // navigation.replace("Dashboard");
+
+  } catch (error) {
+    console.log(error);
+    Alert.alert("Error", "ไม่สามารถเชื่อมต่อ Server ได้");
+  } finally {
     setLoading(false);
-  };
-
+  }
+};
   return (
     <ImageBackground
       source={require('../../../src/public/pictures/background-welcome.png')}
