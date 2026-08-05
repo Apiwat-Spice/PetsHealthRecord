@@ -1,5 +1,7 @@
 const supabase = require("../config/supabase");
+const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+
 exports.register = async (req, res) => {
   try {
     const {
@@ -10,7 +12,7 @@ exports.register = async (req, res) => {
       phone_number,
     } = req.body;
 
-    if (!firstname || !lastname  || !email || !password || !phone_number) {
+    if (!firstname || !lastname || !email || !password || !phone_number) {
       return res.status(400).json({
         message: "Please fill all fields2",
       });
@@ -87,27 +89,43 @@ exports.register = async (req, res) => {
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
+  
   try {
     //หาจากตาราง users
     const { data: user, error } = await supabase
       .from('users')
       .select('*')
       .eq('email', email)
-      .single(); 
+      .single();
 
     //ถ้าไม่เจออีเมลนี้ในตาราง
     if (error || !user) {
       return res.status(401).json({ message: "ไม่พบอีเมลนี้ในระบบ" });
     }
-
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     //นำรหัสผ่านที่กรอกมา เทียบกับช่อง password_hash
-    if (user.password_hash !== password) {
-      return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
+    if (!isMatch) {
+      return res.status(401).json({
+        message: "รหัสผ่านไม่ถูกต้อง",
+      });
     }
+    // สร้าง JWT
+    const token = jwt.sign(
+      {
+        user_id: user.user_id,
+        email: user.email,
+        role: user.role,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
 
     //ถ้ารหัสผ่านตรงกัน เข้าสู่ระบบได้
     return res.status(200).json({
       message: "เข้าสู่ระบบสำเร็จ!",
+      token: token,
       user: {
         user_id: user.user_id,
         email: user.email,

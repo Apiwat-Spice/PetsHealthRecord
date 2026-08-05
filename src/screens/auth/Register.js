@@ -7,9 +7,12 @@ import {
   TextInput,
   TouchableOpacity,
   Alert,
+  ImageBackground,
+  Pressable,
 } from "react-native";
+import { Feather } from '@expo/vector-icons';
 
-export default function Register( {navigation} ) {
+export default function Register({ navigation }) {
   const [firstname, setFirstname] = useState("");
   const [lastname, setLastname] = useState("");
   const [email, setEmail] = useState("");
@@ -73,7 +76,7 @@ export default function Register( {navigation} ) {
       const result = await response.json();
       console.log(result);
       if (response.ok) {
-  
+
         Alert.alert(
           "Register Success Go to Login",
           result.message,
@@ -94,100 +97,209 @@ export default function Register( {navigation} ) {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Register</Text>
+    <ImageBackground
+      source={require("../../../src/public/pictures/background-welcome.png")}
+      style={styles.background}
+      resizeMode="cover"
+    >
+      <Pressable
+        style={styles.backButton}
+        onPress={() => navigation.navigate("Welcome")}
+      >
+        <Feather name="chevron-left" size={24} color="black" />
+        <Text style={styles.backText}>Back</Text>
+      </Pressable>
 
-      <TextInput
-        style={styles.input}
-        placeholder="First Name"
-        value={firstname}
-        onChangeText={setFirstname}
-      />
+      <View style={styles.bottomSheet}>
+        <Text style={styles.title}>Get Started as PetOwner</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Last Name"
-        value={lastname}
-        onChangeText={setLastname}
-      />
+        <View style={styles.inputWrapper}>
+          <Text style={styles.floatingLabel}>First Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter first name"
+            value={firstname}
+            onChangeText={setFirstname}
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Email"
-        keyboardType="email-address"
-        autoCapitalize="none"
-        value={email}
-        onChangeText={setEmail}
-      />
+        <View style={styles.inputWrapper}>
+          <Text style={styles.floatingLabel}>Last Name</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter last name"
+            value={lastname}
+            onChangeText={setLastname}
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-      />
+        <View style={styles.inputWrapper}>
+          <Text style={styles.floatingLabel}>Email</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Confirm Password"
-        secureTextEntry
-        value={confirmPassword}
-        onChangeText={setConfirmPassword}
-      />
+        <View style={styles.inputWrapper}>
+          <Text style={styles.floatingLabel}>Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+        </View>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Phone Number"
-        keyboardType="phone-pad"
-        value={phone_number}
-        onChangeText={setPhoneNumber}
-      />
+        <View style={styles.inputWrapper}>
+          <Text style={styles.floatingLabel}>Confirm Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Confirm password"
+            value={confirmPassword}
+            onChangeText={setConfirmPassword}
+            secureTextEntry
+          />
+        </View>
 
+        <View style={styles.inputWrapper}>
+          <Text style={styles.floatingLabel}>Phone Number</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter phone number"
+            value={phone_number}
+            onChangeText={setPhoneNumber}
+            keyboardType="phone-pad"
+          />
+        </View>
 
+        <Pressable
+          style={({ pressed }) => [
+            styles.signInButton,
+            pressed && styles.signInButtonPressed,
+          ]}
+          onPress={handleRegister}
+        >
+          <Text style={styles.signInButtonText}>Register</Text>
+        </Pressable>
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister}>
-        <Text style={styles.buttonText}>Register</Text>
-      </TouchableOpacity>
+        <View style={styles.footerRow}>
+          <Text style={styles.footerText}>
+            Already have an account?{" "}
+          </Text>
 
-      <StatusBar style="auto" />
-    </View>
+          <Pressable onPress={() => navigation.navigate("Login")}>
+            <Text style={styles.signUpText}>Sign in</Text>
+          </Pressable>
+        </View>
+      </View>
+    </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  background: {
     flex: 1,
-    backgroundColor: "#fff",
-    justifyContent: "center",
+    width: "100%",
+    justifyContent: "flex-end",
+  },
+
+  backButton: {
+    position: "absolute",
+    top: 50,
+    left: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  backText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginLeft: 5,
+  },
+
+  bottomSheet: {
+    backgroundColor: "#FFFFFF",
+    borderTopLeftRadius: 40,
+    borderTopRightRadius: 40,
     paddingHorizontal: 30,
+    paddingTop: 40,
+    paddingBottom: 25,
   },
 
   title: {
-    fontSize: 30,
+    fontSize: 24,
     fontWeight: "bold",
-    marginBottom: 30,
+    color: "#8EB4D0",
     textAlign: "center",
+    marginBottom: 30,
+  },
+
+  inputWrapper: {
+    borderWidth: 1,
+    borderColor: "#D3D3D3",
+    borderRadius: 10,
+    marginBottom: 18,
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+    position: "relative",
+  },
+
+  floatingLabel: {
+    position: "absolute",
+    top: -10,
+    left: 15,
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 5,
+    fontSize: 12,
+    color: "#666",
+    fontWeight: "bold",
   },
 
   input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 15,
+    fontSize: 14,
+    color: "#333",
+    paddingVertical: 8,
   },
 
-  button: {
-    backgroundColor: "#007AFF",
-    padding: 15,
-    borderRadius: 8,
+  signInButton: {
+    backgroundColor: "#9FBBD0",
+    borderRadius: 10,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 10,
+    marginBottom: 25,
   },
 
-  buttonText: {
-    color: "#fff",
-    textAlign: "center",
+  signInButtonPressed: {
+    backgroundColor: "#86A7BD",
+  },
+
+  signInButtonText: {
+    color: "#FFFFFF",
+    fontSize: 18,
     fontWeight: "bold",
-    fontSize: 16,
+  },
+
+  footerRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+
+  footerText: {
+    fontSize: 14,
+    color: "#A9A9A9",
+  },
+
+  signUpText: {
+    fontSize: 14,
+    color: "#8EB4D0",
+    fontWeight: "bold",
   },
 });

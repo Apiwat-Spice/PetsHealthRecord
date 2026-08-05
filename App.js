@@ -7,34 +7,28 @@ import ForgotPasswordScreen from "./src/screens/auth/ForgotPassword";
 import Register from "./src/screens/auth/Register";
 import OTP from "./src/screens/auth/OTP";
 
+import PetOwnerTabs from "./src/navigation/PetOwnerTabs";
+
 const Stack = createNativeStackNavigator();
 
-export default function AppNavigator() {
+export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator>
-        <Stack.Screen
-          name="Welcome"
-          component={WelcomeScreen}
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen
-          name="Login"
-          component={LoginScreen}
-          options={{ headerShown: false }}
-        />
+      <Stack.Navigator
+        screenOptions={{ headerShown: false }}
+      >
+        <Stack.Screen name="Welcome" component={WelcomeScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+        <Stack.Screen name="Register" component={Register} />
+        <Stack.Screen name="OTP" component={OTP} />
         <Stack.Screen
           name="ForgotPassword"
           component={ForgotPasswordScreen}
-          options={{ headerShown: false }}
         />
+
         <Stack.Screen
-          name="Register"
-          component={Register}
-        />
-        <Stack.Screen
-          name="OTP"
-          component={OTP}
+          name="PetOwnerTabs"
+          component={PetOwnerTabs}
         />
       </Stack.Navigator>
     </NavigationContainer>

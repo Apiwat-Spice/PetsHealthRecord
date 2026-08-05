@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View, ImageBackground, Pressable, TextInput, Alert, ActivityIndicator } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import * as SecureStore from "expo-secure-store";
 import Checkbox from 'expo-checkbox';
 
 export default function Login({ navigation }) {
@@ -9,47 +10,57 @@ export default function Login({ navigation }) {
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
 
-const handleLogin = async () => {
-  if (!email || !password) {
-    Alert.alert("แจ้งเตือน", "กรุณากรอกอีเมลและรหัสผ่าน");
-    return;
-  }
-
-  setLoading(true);
-
-  try {
-    const response = await fetch("http://192.168.1.188:3000/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email,
-        password,
-      }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      Alert.alert("เข้าสู่ระบบล้มเหลว", result.message || "อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert("แจ้งเตือน", "กรุณากรอกอีเมลและรหัสผ่าน");
       return;
     }
 
-    Alert.alert("สำเร็จ", result.message);
+    setLoading(true);
 
-    console.log(result);
+    try {
+      const response = await fetch("http://10.0.2.2:3000/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
 
-    // ตัวอย่าง
-    //navigation.replace("DashboardPetOwner");
+      const result = await response.json();
 
-  } catch (error) {
-    console.log(error);
-    Alert.alert("Error", "ไม่สามารถเชื่อมต่อ Server ได้");
-  } finally {
-    setLoading(false);
-  }
-};
+      if (!response.ok) {
+        Alert.alert(
+          "เข้าสู่ระบบล้มเหลว",
+          result.message || "อีเมลหรือรหัสผ่านไม่ถูกต้อง"
+        );
+        return;
+      }
+
+      // เก็บ JWT
+      await SecureStore.setItemAsync("token", result.token);
+
+      // ถ้าต้องการเก็บข้อมูลผู้ใช้
+      await SecureStore.setItemAsync(
+        "user",
+        JSON.stringify(result.user)
+      );
+
+      Alert.alert("สำเร็จ", result.message);
+
+      navigation.replace("PetOwnerTabs");;
+
+    } catch (error) {
+      console.log(error);
+      Alert.alert("Error", "ไม่สามารถเชื่อมต่อ Server ได้");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <ImageBackground
       source={require('../../../src/public/pictures/background-welcome.png')}
