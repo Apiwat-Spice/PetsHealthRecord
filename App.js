@@ -21,10 +21,7 @@ export default function App() {
         <Stack.Screen name="Login" component={LoginScreen} />
         <Stack.Screen name="Register" component={Register} />
         <Stack.Screen name="OTP" component={OTP} />
-        <Stack.Screen
-          name="ForgotPassword"
-          component={ForgotPasswordScreen}
-        />
+        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
 
         <Stack.Screen
           name="PetOwnerTabs"

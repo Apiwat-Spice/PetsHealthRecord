@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, ImageBackground, Pressable, TextInput, Alert, A
 import { Feather } from '@expo/vector-icons';
 import * as SecureStore from "expo-secure-store";
 import Checkbox from 'expo-checkbox';
+import { API_URL } from '../../config';
 
 export default function Login({ navigation }) {
   const [email, setEmail] = useState('');
@@ -19,7 +20,7 @@ export default function Login({ navigation }) {
     setLoading(true);
 
     try {
-      const response = await fetch("http://10.0.2.2:3000/login", {
+      const response = await fetch(`${API_URL}/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -32,6 +33,15 @@ export default function Login({ navigation }) {
 
       const result = await response.json();
 
+      console.log("LOGIN RESULT:", result);
+
+      if (result.require_otp) {
+        navigation.navigate("OTP", {
+          email: result.email,
+        });
+        return;
+      }
+
       if (!response.ok) {
         Alert.alert(
           "เข้าสู่ระบบล้มเหลว",
@@ -41,21 +51,38 @@ export default function Login({ navigation }) {
       }
 
       // เก็บ JWT
-      await SecureStore.setItemAsync("token", result.token);
+      await SecureStore.setItemAsync(
+        "token",
+        result.token
+      );
 
-      // ถ้าต้องการเก็บข้อมูลผู้ใช้
+      // เก็บข้อมูล User
       await SecureStore.setItemAsync(
         "user",
         JSON.stringify(result.user)
       );
 
-      Alert.alert("สำเร็จ", result.message);
-
-      navigation.replace("PetOwnerTabs");;
+      Alert.alert(
+        "สำเร็จ",
+        result.message,
+        [
+          {
+            text: "ตกลง",
+            onPress: () => {
+              navigation.replace("PetOwnerTabs");
+            },
+          },
+        ]
+      );
 
     } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "ไม่สามารถเชื่อมต่อ Server ได้");
+      console.log("LOGIN ERROR:", error);
+
+      Alert.alert(
+        "Error",
+        "ไม่สามารถเชื่อมต่อ Server ได้"
+      );
+
     } finally {
       setLoading(false);
     }

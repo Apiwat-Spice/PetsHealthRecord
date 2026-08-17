@@ -26,7 +26,6 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
-
       <Tab.Screen
         name="Pets"
         component={Pets}
@@ -36,7 +35,6 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
-
       <Tab.Screen
         name="Scan QR"
         component={ScanQr}
@@ -46,7 +44,6 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
-
       <Tab.Screen
         name="Search"
         component={Search}
@@ -56,7 +53,6 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
-
       <Tab.Screen
         name="Profile"
         component={Profile}

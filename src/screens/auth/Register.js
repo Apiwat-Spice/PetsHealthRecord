@@ -11,6 +11,7 @@ import {
   Pressable,
 } from "react-native";
 import { Feather } from '@expo/vector-icons';
+import { API_URL } from '../../config';
 
 export default function Register({ navigation }) {
   const [firstname, setFirstname] = useState("");
@@ -59,7 +60,7 @@ export default function Register({ navigation }) {
       return;
     }
     try {
-      const response = await fetch("http://10.0.2.2:3000/register", {
+      const response = await fetch(`${API_URL}/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -78,12 +79,12 @@ export default function Register({ navigation }) {
       if (response.ok) {
 
         Alert.alert(
-          "Register Success Go to Login",
+          "Register Success Go to OTP",
           result.message,
           [
             {
               text: "OK",
-              onPress: () => navigation.navigate("Login"),
+              onPress: () => navigation.navigate("OTP",{email:mail}),
             },
           ]
         );
