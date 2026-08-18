@@ -8,7 +8,7 @@ import Register from "./src/screens/auth/Register";
 import OTP from "./src/screens/auth/OTP";
 
 import PetOwnerTabs from "./src/navigation/PetOwnerTabs";
-
+import AddPetScreen from "./src/screens/PetOwner/AddPetScreen";
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -26,6 +26,10 @@ export default function App() {
         <Stack.Screen
           name="PetOwnerTabs"
           component={PetOwnerTabs}
+        />
+        <Stack.Screen 
+          name="AddPetScreen" 
+          component={AddPetScreen} 
         />
       </Stack.Navigator>
     </NavigationContainer>

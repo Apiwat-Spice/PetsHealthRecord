@@ -7,21 +7,23 @@ import {
   TouchableOpacity,
 } from "react-native";
 
-export default function Pets() {
+export default function Pets({ navigation }) {
   return (
     <ScrollView style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>My Pets</Text>
 
-        <TouchableOpacity style={styles.addButton}>
+        // ปุ่มเพิ่มสัตว์เลี้ยง
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => navigation.navigate('AddPetScreen')}
+        >
           <Text style={styles.addButtonText}>+ Add Pet</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Pet Card 1 */}
       <View style={styles.card}>
         <View style={styles.imagePlaceholder}>
           <Text style={styles.imageText}>🐶</Text>
@@ -40,7 +42,6 @@ export default function Pets() {
         </View>
       </View>
 
-      {/* Pet Card 2 */}
       <View style={styles.card}>
         <View style={styles.imagePlaceholder}>
           <Text style={styles.imageText}>🐱</Text>
