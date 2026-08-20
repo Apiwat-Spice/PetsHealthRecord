@@ -1,15 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, StatusBar, Platform, Alert, Image } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { API_URL } from '../../config';
 import * as ImagePicker from 'expo-image-picker';
+import * as SecureStore from 'expo-secure-store';
 
 export default function AddPetScreen({ navigation }) {
-    const [date, setDate] = useState(new Date()); 
+    const [date, setDate] = useState(new Date());
     const [showDatePicker, setShowDatePicker] = useState(false);
     const [imageUri, setImageUri] = useState(null);
+    const [imageBase64, setImageBase64] = useState(null);
+    const [isLoading, setIsLoading] = useState(false);
+    const [currentOwnerId, setCurrentOwnerId] = useState(null);
+
+    useEffect(() => {
+        const loadUserData = async () => {
+            try {
+                // 🟢 เปลี่ยนจาก "user" เป็น "pet_owners" เพื่อดึงข้อมูลอีกกล่องแทนครับ
+                const ownerString = await SecureStore.getItemAsync("pet_owners");
+
+                if (ownerString) {
+                    const ownerData = JSON.parse(ownerString);
+                    console.log("✅ ข้อมูล Pet Owner ที่ดึงมาจากเครื่อง:", ownerData); // ดูใน Log ต้องมี pet_owners_id แน่นอน
+
+                    if (ownerData.pet_owners_id) {
+                        setCurrentOwnerId(ownerData.pet_owners_id);
+                    } else {
+                        console.log("⚠️ คำเตือน: หา pet_owners_id ไม่เจอในกล่องนี้");
+                    }
+                } else {
+                    console.log("❌ ไม่พบข้อมูลกล่อง pet_owners ในเครื่อง (ลืมกดย้อนกลับไปล็อกอินใหม่หรือเปล่า?)");
+                }
+            } catch (error) {
+                console.error("Error loading user data:", error);
+            }
+        };
+        loadUserData();
+    }, []);
 
     const [petData, setPetData] = useState({
         name: '',
@@ -24,13 +53,54 @@ export default function AddPetScreen({ navigation }) {
     const pickImage = async () => {
         let result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ['images'], // 🟢 แก้ไขเพื่อลบ Warning
-            allowsEditing: true, 
-            aspect: [1, 1],      
-            quality: 0.8,        
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.8,
+            base64: true,
         });
 
         if (!result.canceled) {
-            setImageUri(result.assets[0].uri); 
+            setImageUri(result.assets[0].uri); // เอาไว้โชว์บนหน้าจอตามปกติ
+            setImageBase64(result.assets[0].base64);
+        }
+    };
+    const uploadImageToCloudinary = async (base64String) => {
+        try {
+            console.log("👉 [1] เริ่มอัปโหลดรูปด้วยวิธี Base64...");
+
+            // นำข้อความ Base64 มาต่อกับโค้ดด้านหน้า เพื่อให้ Cloudinary รู้ว่าเป็นไฟล์ภาพ
+            const dataUrl = `data:image/jpeg;base64,${base64String}`;
+
+            // ยิง API แบบ JSON ธรรมดาเลย (หลบปัญหา FormData พังได้ 100%)
+            const response = await fetch('https://api.cloudinary.com/v1_1/dedkhhsja/image/upload/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    file: dataUrl,
+                    upload_preset: 'pet_app_preset' ,// ชื่อ Preset ของคุณ
+                    folder: 'Pet' // ชื่อ Folder ของคุณ
+                }),
+            });
+
+            const result = await response.json();
+            console.log("👉 [2] ข้อมูลที่ Cloudinary ตอบกลับมา:", result);
+
+            if (result.secure_url) {
+                console.log("✅ อัปโหลดสำเร็จ Public ID คือ:", result.public_id);
+                console.log("✅ อัปโหลดสำเร็จ ลิงก์คือ:", result.secure_url);
+                return {
+                    url: result.secure_url,
+                    publicId: result.public_id // จับ public_id ที่คลาวด์ให้มา ส่งกลับไป
+                };
+            } else {
+                console.error("❌ Cloudinary Upload Error:", result);
+                return null;
+            }
+        } catch (error) {
+            console.error("❌ Error uploading:", error);
+            return null;
         }
     };
 
@@ -41,7 +111,7 @@ export default function AddPetScreen({ navigation }) {
         }
 
         const currentDate = selectedDate || date;
-        setShowDatePicker(Platform.OS === 'ios'); 
+        setShowDatePicker(Platform.OS === 'ios');
         if (Platform.OS === 'android') setShowDatePicker(false);
 
         setDate(currentDate);
@@ -57,17 +127,94 @@ export default function AddPetScreen({ navigation }) {
         setPetData({ ...petData, [field]: value });
     };
 
-    const handleSavePet = () => {
-        // 🟢 รวมข้อมูลทั้งหมด รวมถึงรูปภาพ
-        const finalData = { ...petData, image_url: imageUri };
 
-        // 🟢 ปริ้นท์ลง Log
-        console.log('\n--- ข้อมูลสัตว์เลี้ยงที่จะส่งเข้า Database ---');
-        console.log(JSON.stringify(finalData, null, 2));
-        console.log('-----------------------------------------\n');
+    const handleSavePet = async () => {
+        if (!petData.name || !petData.animaltype || !petData.sex) {
+            Alert.alert('แจ้งเตือน', 'กรุณากรอกชื่อ ชนิด และเลือกเพศสัตว์เลี้ยง');
+            return;
+        }
 
-        // 🟢 แสดง Pop-up บนจอมือถือเพื่อให้รู้ว่าปุ่มทำงานแล้ว
-        Alert.alert('เรียบร้อย!', 'ข้อมูลถูกส่งเข้า Log แล้ว เช็คใน Terminal ได้เลยครับ');
+        if (!currentOwnerId) {
+            Alert.alert('ข้อผิดพลาด', 'ไม่พบข้อมูลผู้ใช้งาน กรุณาล็อกอินใหม่อีกครั้ง');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+
+            // 🟢 1. จัดการวันที่
+            let dbFormattedDate = null;
+            if (petData.birth_date) {
+                const [day, month, year] = petData.birth_date.split('/');
+                dbFormattedDate = `${year}-${month}-${day}`;
+            }
+
+            // 🟢 2. อัปโหลดรูป
+            // ... โค้ดด้านบน (จัดการวันที่) เหมือนเดิม ...
+
+            // 🟢 เพิ่มตัวแปรสำหรับเก็บ Public ID
+            let finalImageUrl = null;
+            let finalImagePublicId = null; 
+
+            if (imageBase64) {
+                const uploadResult = await uploadImageToCloudinary(imageBase64); 
+                
+                if (!uploadResult) {
+                    Alert.alert('ข้อผิดพลาด', 'อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่');
+                    setIsLoading(false);
+                    return; 
+                }
+
+                // 🟢 แยกข้อมูล URL และ Public ID ออกมาจากที่ return ไว้
+                finalImageUrl = uploadResult.url;
+                finalImagePublicId = uploadResult.publicId; 
+            }
+
+            // 🟢 นำข้อมูลใส่ Payload เพื่อเตรียมยิง API 
+            const payload = {
+                pet_owners_id: currentOwnerId,
+                pet_name: petData.name,
+                animal_type: petData.animaltype,
+                species: petData.species,
+                sex: petData.sex,
+                birth_date: dbFormattedDate,
+                weight: petData.weight || null,
+                detail: petData.detail,
+                pet_image_url: finalImageUrl, 
+                // 🔥 ส่ง Public ID แนบไปกับ API ด้วย
+                pet_image_public_id: finalImagePublicId 
+            };
+
+            const response = await fetch(`${API_URL}/pets/add`, {
+                method: 'POST',
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+
+            // ... โค้ดด้านล่างเหมือนเดิม ...
+
+            const responseText = await response.text();
+            let result;
+            try {
+                result = JSON.parse(responseText);
+            } catch (e) {
+                throw new Error(`เซิร์ฟเวอร์ไม่ได้ส่งข้อมูล JSON กลับมา (Status: ${response.status})`);
+            }
+
+            if (!response.ok) {
+                throw new Error(result.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
+            }
+
+            Alert.alert('สำเร็จ', 'เพิ่มข้อมูลสัตว์เลี้ยงเรียบร้อยแล้ว!', [
+                { text: 'ตกลง', onPress: () => navigation?.goBack() }
+            ]);
+
+        } catch (error) {
+            console.error("Save Pet Error:", error);
+            Alert.alert('ข้อผิดพลาด', error.message);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -133,26 +280,26 @@ export default function AddPetScreen({ navigation }) {
                             <Text style={styles.inputLabel}>เพศ <Text style={styles.textRequired}>*</Text></Text>
                             <View style={styles.sexRow}>
                                 <TouchableOpacity
-                                    style={[styles.sexBtn, petData.sex === 'Male' && styles.sexBtnActiveBlue]}
-                                    onPress={() => handleChange('sex', 'Male')}
+                                    style={[styles.sexBtn, petData.sex === 'male' && styles.sexBtnActiveBlue]}
+                                    onPress={() => handleChange('sex', 'male')}
                                 >
-                                    <MaterialCommunityIcons name="gender-male" size={20} color={petData.sex === 'Male' ? '#FFF' : '#1976D2'} />
-                                    <Text style={[styles.sexText, petData.sex === 'Male' && { color: '#FFF' }]}>ตัวผู้</Text>
+                                    <MaterialCommunityIcons name="gender-male" size={20} color={petData.sex === 'male' ? '#FFF' : '#1976D2'} />
+                                    <Text style={[styles.sexText, petData.sex === 'male' && { color: '#FFF' }]}>ตัวผู้</Text>
                                 </TouchableOpacity>
 
                                 <TouchableOpacity
-                                    style={[styles.sexBtn, petData.sex === 'Female' && styles.sexBtnActivePink]}
-                                    onPress={() => handleChange('sex', 'Female')}
+                                    style={[styles.sexBtn, petData.sex === 'female' && styles.sexBtnActivePink]}
+                                    onPress={() => handleChange('sex', 'female')}
                                 >
-                                    <MaterialCommunityIcons name="gender-female" size={20} color={petData.sex === 'Female' ? '#FFF' : '#E91E63'} />
-                                    <Text style={[styles.sexText, petData.sex === 'Female' && { color: '#FFF' }]}>ตัวเมีย</Text>
+                                    <MaterialCommunityIcons name="gender-female" size={20} color={petData.sex === 'female' ? '#FFF' : '#E91E63'} />
+                                    <Text style={[styles.sexText, petData.sex === 'female' && { color: '#FFF' }]}>ตัวเมีย</Text>
                                 </TouchableOpacity>
                             </View>
 
                             <View style={styles.rowForm}>
                                 <View style={{ flex: 1, marginRight: 8 }}>
                                     <Text style={styles.inputLabel}>วันเกิด</Text>
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         style={styles.datePickerInput}
                                         onPress={() => setShowDatePicker(true)}
                                     >
@@ -200,7 +347,7 @@ export default function AddPetScreen({ navigation }) {
                     mode="date"
                     display="default"
                     onChange={handleDateChange}
-                    maximumDate={new Date()} 
+                    maximumDate={new Date()}
                 />
             )}
         </SafeAreaView>
@@ -220,7 +367,7 @@ const styles = StyleSheet.create({
 
     uploadPhotoSection: { alignItems: 'center', marginVertical: 20 },
     photoCircle: { width: 100, height: 100, borderRadius: 50, backgroundColor: '#ECFBFF', borderWidth: 2, borderColor: '#0055B3', borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', marginBottom: 12, overflow: 'hidden' },
-    previewImage: { width: '100%', height: '100%' }, 
+    previewImage: { width: '100%', height: '100%' },
     uploadPhotoText: { color: '#0055B3', fontSize: 14, fontWeight: 'bold' },
 
     formContainer: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#EAEAEC', elevation: 1, marginBottom: 24 },

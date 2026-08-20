@@ -61,6 +61,13 @@ export default function Login({ navigation }) {
         "user",
         JSON.stringify(result.user)
       );
+      
+      if (result.pet_owner) {
+        await SecureStore.setItemAsync(
+          "pet_owners",
+          JSON.stringify(result.pet_owner)
+        );
+      }
 
       Alert.alert(
         "สำเร็จ",

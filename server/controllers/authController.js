@@ -243,7 +243,18 @@ exports.login = async (req, res) => {
       }
     );
 
-    // 5. Login สำเร็จ
+    // 🔥 5. ค้นหาข้อมูล Pet Owner ของ User คนนี้ (เพิ่มส่วนนี้เข้ามา)
+    const { data: petOwnerData, error: ownerError } = await supabase
+      .from("pet_owners")
+      .select("*")
+      .eq("user_id", user.user_id)
+      .maybeSingle();
+
+    if (ownerError) {
+      console.error("Fetch Pet Owner Error:", ownerError);
+    }
+
+    // 🔥 6. Login สำเร็จ (เพิ่ม pet_owner ส่งกลับไปใน Response ด้วย)
     return res.status(200).json({
       message: "เข้าสู่ระบบสำเร็จ!",
       token: token,
@@ -252,6 +263,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
       },
+      pet_owner: petOwnerData || null // ส่งข้อมูลโปรไฟล์กลับไปให้แอปเซฟ
     });
 
   } catch (err) {
