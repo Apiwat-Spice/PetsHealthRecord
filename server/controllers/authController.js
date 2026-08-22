@@ -147,7 +147,6 @@ exports.register = async (req, res) => {
     });
   }
 };
-
 // login
 exports.login = async (req, res) => {
   const { email, password } = req.body;

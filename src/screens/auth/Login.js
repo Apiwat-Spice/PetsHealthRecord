@@ -5,7 +5,7 @@ import * as SecureStore from "expo-secure-store";
 import Checkbox from 'expo-checkbox';
 import { API_URL } from '../../config';
 
-export default function Login({ navigation }) {
+export default function Login({ navigation, setIsLoggedIn }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -61,7 +61,7 @@ export default function Login({ navigation }) {
         "user",
         JSON.stringify(result.user)
       );
-      
+
       if (result.pet_owner) {
         await SecureStore.setItemAsync(
           "pet_owners",
@@ -76,12 +76,11 @@ export default function Login({ navigation }) {
           {
             text: "ตกลง",
             onPress: () => {
-              navigation.replace("PetOwnerTabs");
+              setIsLoggedIn(true);
             },
           },
         ]
       );
-
     } catch (error) {
       console.log("LOGIN ERROR:", error);
 
