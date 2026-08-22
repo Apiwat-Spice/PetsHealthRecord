@@ -5,8 +5,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PetDetail({ route, navigation }) {
     // 🟢 รับข้อมูลสัตว์เลี้ยงที่ส่งมาจากหน้า Pets.js
+    console.log("📦 ข้อมูลที่หน้า PetDetail ได้รับ:", route.params);
     const { pet } = route.params || {};
-
+    console.log("🐶 ข้อมูลสัตว์เลี้ยง:", pet);
     // 🟢 State สำหรับจัดการ Tab (info = ข้อมูลทั่วไป, health = ประวัติสุขภาพ, qr = QR Code)
     const [activeTab, setActiveTab] = useState('info');
 
@@ -29,6 +30,7 @@ export default function PetDetail({ route, navigation }) {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>{pet?.pet_name || 'ชื่อสัตว์เลี้ยง'}</Text>
                 <View style={{ width: 24 }} /> 
+                {/* ไว้ถ่วงน้ำหนักให้ Title อยู่ตรงกลาง */}
             </View>
 
             <View style={styles.bodyContainer}>

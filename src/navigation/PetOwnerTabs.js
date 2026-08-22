@@ -12,7 +12,6 @@ import AddPetScreen from "../screens/PetOwner/AddPetScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-
 function PetOwnerStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>

@@ -114,7 +114,7 @@ export default function Pets({ navigation }) {
                 <Text style={styles.detail}>Birth Date : {pet.birth_date}</Text>
               )}
 
-              <TouchableOpacity style={styles.detailButton} onPress={() => navigation.navigate('PetDetail')}>
+              <TouchableOpacity style={styles.detailButton} onPress={() => navigation.navigate('PetDetail', { pet : pet })}>
                 <Text style={styles.buttonText}>View Detail</Text>
               </TouchableOpacity>
             </View>
