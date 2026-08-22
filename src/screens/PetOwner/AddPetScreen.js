@@ -181,7 +181,6 @@ export default function AddPetScreen({ navigation }) {
                 weight: petData.weight || null,
                 detail: petData.detail,
                 pet_image_url: finalImageUrl, 
-                // 🔥 ส่ง Public ID แนบไปกับ API ด้วย
                 pet_image_public_id: finalImagePublicId 
             };
 
