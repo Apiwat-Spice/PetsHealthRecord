@@ -1,5 +1,6 @@
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import WelcomeScreen from "./src/screens/auth/Welcome";
 import LoginScreen from "./src/screens/auth/Login";
@@ -12,23 +13,27 @@ import AddPetScreen from "./src/screens/PetOwner/AddPetScreen";
 import PetDetail from "./src/screens/PetOwner/PetDetail";
 const Stack = createNativeStackNavigator();
 
+
 export default function App() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator
-        screenOptions={{ headerShown: false }}
-      >
-        <Stack.Screen name="Welcome" component={WelcomeScreen} />
-        <Stack.Screen name="Login" component={LoginScreen} />
-        <Stack.Screen name="Register" component={Register} />
-        <Stack.Screen name="OTP" component={OTP} />
-        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+    <SafeAreaProvider>
 
-        <Stack.Screen
-          name="PetOwnerTabs"
-          component={PetOwnerTabs}
-        />
-      </Stack.Navigator>
-    </NavigationContainer>
+      <NavigationContainer>
+        <Stack.Navigator
+          screenOptions={{ headerShown: false }}
+        >
+          <Stack.Screen name="Welcome" component={WelcomeScreen} />
+          <Stack.Screen name="Login" component={LoginScreen} />
+          <Stack.Screen name="Register" component={Register} />
+          <Stack.Screen name="OTP" component={OTP} />
+          <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+
+          <Stack.Screen
+            name="PetOwnerTabs"
+            component={PetOwnerTabs}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

@@ -1,4 +1,5 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import DashboardPetOwner from "../screens/PetOwner/Dashboard";
@@ -9,10 +10,10 @@ import Profile from "../screens/PetOwner/Profile";
 import PetDetail from "../screens/PetOwner/PetDetail";
 import AddPetScreen from "../screens/PetOwner/AddPetScreen";
 
-
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-export default function PetOwnerStack() {
+
+function PetOwnerStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen
@@ -24,6 +25,7 @@ export default function PetOwnerStack() {
         name="AddPetScreen"
         component={AddPetScreen}
       />
+
       <Stack.Screen
         name="PetDetail"
         component={PetDetail}
@@ -31,6 +33,7 @@ export default function PetOwnerStack() {
     </Stack.Navigator>
   );
 }
+
 export default function PetOwnerTabs() {
   return (
     <Tab.Navigator
@@ -48,6 +51,7 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
+
       <Tab.Screen
         name="PetOwnerStack"
         component={PetOwnerStack}
@@ -57,6 +61,7 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
+
       <Tab.Screen
         name="Scan QR"
         component={ScanQr}
@@ -66,6 +71,7 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
+
       <Tab.Screen
         name="Search"
         component={Search}
@@ -75,6 +81,7 @@ export default function PetOwnerTabs() {
           ),
         }}
       />
+
       <Tab.Screen
         name="Profile"
         component={Profile}

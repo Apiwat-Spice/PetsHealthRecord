@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, SafeAreaView, StatusBar } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, StatusBar ,button} from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PetDetail({ route, navigation }) {
     // 🟢 รับข้อมูลสัตว์เลี้ยงที่ส่งมาจากหน้า Pets.js
@@ -27,7 +28,7 @@ export default function PetDetail({ route, navigation }) {
                     <Feather name="arrow-left" size={24} color="#FFF" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>{pet?.pet_name || 'ชื่อสัตว์เลี้ยง'}</Text>
-                <View style={{ width: 24 }} /> {/* ไว้ถ่วงน้ำหนักให้ Title อยู่ตรงกลาง */}
+                <View style={{ width: 24 }} /> 
             </View>
 
             <View style={styles.bodyContainer}>
@@ -102,6 +103,12 @@ export default function PetDetail({ route, navigation }) {
                                 </View>
                             )}
                         </View>
+
+                        <button style={{ backgroundColor: '#4F8EF7', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 10 }}
+                            onPress={handleDeletePet}
+                        >
+                            <Text style={{ color: '#FFF', fontWeight: 'bold' }}>Delete Pet</Text>
+                        </button>
 
                     </ScrollView>
                 )}
