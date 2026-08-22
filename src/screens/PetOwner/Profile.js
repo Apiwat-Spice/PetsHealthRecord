@@ -6,8 +6,47 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import { Alert } from "react-native";
 
-export default function Profile() {
+
+
+
+export default function Profile({ setIsLoggedIn  }) {
+  const handleLogout = () => {
+    Alert.alert(
+      "ออกจากระบบ",
+      "คุณต้องการออกจากระบบหรือไม่?",
+      [
+        {
+          text: "ยกเลิก",
+          style: "cancel",
+        },
+        {
+          text: "Logout",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await SecureStore.deleteItemAsync("token");
+              await SecureStore.deleteItemAsync("user");
+              await SecureStore.deleteItemAsync("pet_owners");
+
+              // เปลี่ยนสถานะ Login
+              setIsLoggedIn(false);
+
+            } catch (error) {
+              console.error("Logout Error:", error);
+
+              Alert.alert(
+                "เกิดข้อผิดพลาด",
+                "ไม่สามารถออกจากระบบได้"
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
   return (
     <ScrollView style={styles.container}>
       <StatusBar style="dark" />
@@ -71,7 +110,10 @@ export default function Profile() {
         <Text style={styles.menuText}>Privacy Policy</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.logoutButton}>
+      <TouchableOpacity
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
 

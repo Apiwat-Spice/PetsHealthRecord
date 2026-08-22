@@ -33,7 +33,7 @@ function PetOwnerStack() {
   );
 }
 
-export default function PetOwnerTabs() {
+export default function PetOwnerTabs({setIsLoggedIn}) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -83,13 +83,19 @@ export default function PetOwnerTabs() {
 
       <Tab.Screen
         name="Profile"
-        component={Profile}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Feather name="user" size={size} color={color} />
           ),
         }}
-      />
+      >
+        {(props) => (
+          <Profile
+            {...props}
+            setIsLoggedIn={setIsLoggedIn}
+          />
+        )}
+      </Tab.Screen>
     </Tab.Navigator>
   );
 }
