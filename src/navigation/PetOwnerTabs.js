@@ -6,9 +6,31 @@ import Pets from "../screens/PetOwner/Pets";
 import ScanQr from "../screens/PetOwner/ScanQr";
 import Search from "../screens/PetOwner/Search";
 import Profile from "../screens/PetOwner/Profile";
+import PetDetail from "../screens/PetOwner/PetDetail";
+import AddPetScreen from "../screens/PetOwner/AddPetScreen";
+
 
 const Tab = createBottomTabNavigator();
+const Stack = createNativeStackNavigator();
+export default function PetOwnerStack() {
+  return (
+    <Stack.Navigator screenOptions={{ headerShown: false }}>
+      <Stack.Screen
+        name="Pets"
+        component={Pets}
+      />
 
+      <Stack.Screen
+        name="AddPetScreen"
+        component={AddPetScreen}
+      />
+      <Stack.Screen
+        name="PetDetail"
+        component={PetDetail}
+      />
+    </Stack.Navigator>
+  );
+}
 export default function PetOwnerTabs() {
   return (
     <Tab.Navigator
@@ -27,8 +49,8 @@ export default function PetOwnerTabs() {
         }}
       />
       <Tab.Screen
-        name="Pets"
-        component={Pets}
+        name="PetOwnerStack"
+        component={PetOwnerStack}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Feather name="heart" size={size} color={color} />
