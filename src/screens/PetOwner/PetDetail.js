@@ -19,6 +19,10 @@ export default function PetDetail({ route, navigation }) {
         return `${currentYear - birthYear} ปี`;
     };
 
+    const handleDeletePet = () => {
+        console.log("Delete pet:", pet?.pet_id);
+    }
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#2A4B6A" />
