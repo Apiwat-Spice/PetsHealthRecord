@@ -1,4 +1,5 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import DashboardPetOwner from "../screens/PetOwner/Dashboard";
@@ -12,7 +13,7 @@ import AddPetScreen from "../screens/PetOwner/AddPetScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
-export default function PetOwnerStack() {
+function PetOwnerStack() {
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen
