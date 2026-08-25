@@ -12,14 +12,13 @@ cloudinary.config({
 exports.deletePet = async (req, res) => {
     try {
         const { pet_id } = req.params; // รับ ID ของสัตว์เลี้ยงจาก URL
-        
+
         // 🔹 สเตป 1: ดึงข้อมูลสัตว์เลี้ยงมาเช็กก่อนว่ามี pet_image_public_id ให้ลบไหม
         const { data: petData, error: fetchError } = await supabase
             .from('pets')
             .select('pet_image_public_id')
             .eq('pet_id', pet_id)
             .single(); // ใช้ single() เพราะเราดึงแค่ตัวเดียว
-
         if (fetchError || !petData) {
             console.error("Fetch Error:", fetchError);
             return res.status(404).json({ message: "ไม่พบข้อมูลสัตว์เลี้ยงในระบบ" });
@@ -36,7 +35,7 @@ exports.deletePet = async (req, res) => {
                 // เราไม่ return ตรงนี้ เผื่อให้มันข้ามไปลบข้อมูลใน DB ต่อได้แม้รูปลบไม่ผ่าน
             }
         } else {
-             console.log("⚠️ สัตว์เลี้ยงตัวนี้ไม่มีรูปในระบบ (ข้ามการลบจากคลาวด์)");
+            console.log("⚠️ สัตว์เลี้ยงตัวนี้ไม่มีรูปในระบบ (ข้ามการลบจากคลาวด์)");
         }
 
         // 🔹 สเตป 3: ลบข้อมูลสัตว์เลี้ยงจากฐานข้อมูล Supabase
@@ -49,9 +48,9 @@ exports.deletePet = async (req, res) => {
             console.error("Supabase Delete Error:", error);
             return res.status(500).json({ message: "ไม่สามารถลบข้อมูลสัตว์เลี้ยงได้", error: error.message });
         }
-        
+
         return res.status(200).json({ message: "ลบข้อมูลสัตว์เลี้ยงสำเร็จ", data: data });
-        
+
     } catch (error) {
         console.error("Server Error:", error);
         return res.status(500).json({ message: "เกิดข้อผิดพลาดที่เซิร์ฟเวอร์" });
@@ -61,17 +60,17 @@ exports.deletePet = async (req, res) => {
 // ภายในไฟล์ server/controllers/petController.js
 exports.addPet = async (req, res) => {
     try {
-        const { 
-            pet_owners_id, 
-            pet_name, 
-            animal_type, 
-            species, 
-            sex, 
-            birth_date, 
-            weight, 
-            detail, 
+        const {
+            pet_owners_id,
+            pet_name,
+            animal_type,
+            species,
+            sex,
+            birth_date,
+            weight,
+            detail,
             pet_image_url,
-            pet_image_public_id 
+            pet_image_public_id
         } = req.body;
 
 
@@ -88,9 +87,7 @@ exports.addPet = async (req, res) => {
                     weight: weight || null,
                     detail: detail || null,
                     pet_image_url: pet_image_url || null,
-                    
-                    // 🔥 สั่งให้บันทึก public_id ลงคอลัมน์ใน Supabase
-                    pet_image_public_id: pet_image_public_id || null 
+                    pet_image_public_id: pet_image_public_id || null
                 }
             ])
             .select();

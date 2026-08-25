@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-
+import { CameraView, useCameraPermissions } from 'expo-camera';
 export default function ScanQRcode({ navigation }) {
 
   const clinicInfo = {
@@ -21,6 +21,29 @@ export default function ScanQRcode({ navigation }) {
 
   const [petIdInput, setPetIdInput] = useState('');
 
+  // 🟢 State สำหรับระบบกล้อง
+  const [permission, requestPermission] = useCameraPermissions();
+  const [isScanning, setIsScanning] = useState(false);
+
+  // 🟢 ฟังก์ชันเปิดกล้อง
+  const handleOpenCamera = async () => {
+    if (!permission?.granted) {
+      const result = await requestPermission();
+      if (!result.granted) {
+        Alert.alert('แจ้งเตือน', 'กรุณาอนุญาตให้แอปเข้าถึงกล้องเพื่อสแกน QR Code');
+        return;
+      }
+    }
+    setIsScanning(true); // เปิดหน้าจอกล้อง
+  };
+
+  // 🟢 ฟังก์ชันเมื่อสแกนเจอ QR Code
+  const handleBarCodeScanned = ({ type, data }) => {
+    setIsScanning(false); // ปิดกล้องทันที
+    setPetIdInput(data); // เอาข้อความที่สแกนได้มาใส่ในช่องกรอก
+    Alert.alert('สแกนสำเร็จ!', `รับข้อมูล: ${data}`);
+  };
+
   const handleConfirmPetId = () => {
     if (!petIdInput.trim()) {
       Alert.alert('แจ้งเตือน', 'กรุณากล้องสแกน QR หรือกรอกรหัสสัตว์เลี้ยงก่อนครับ');
@@ -29,11 +52,32 @@ export default function ScanQRcode({ navigation }) {
     Alert.alert('สำเร็จ (โหมดทดสอบ)', `กำลังค้นหาข้อมูลสัตว์เลี้ยงรหัส: ${petIdInput}`, [
       {
         text: 'ดูผลสแกน',
-        // รอหน้า PetScaned
         // onPress: () => navigation.navigate('PetScaned', { petId: petIdInput }),
       },
     ]);
   };
+
+  // 🟢 หากกำลังเปิดกล้อง ให้โชว์หน้าจอสแกน
+  if (isScanning) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
+        <CameraView
+          style={{ flex: 1 }}
+          facing="back"
+          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+          onBarcodeScanned={handleBarCodeScanned}
+        >
+          {/* ปุ่มกดยกเลิกการสแกน */}
+          <View style={styles.cameraOverlay}>
+            <TouchableOpacity style={styles.closeCameraBtn} onPress={() => setIsScanning(false)}>
+              <Feather name="x" size={30} color="#FFF" />
+              <Text style={{ color: '#FFF', marginTop: 5, fontWeight: 'bold' }}>ยกเลิกสแกน</Text>
+            </TouchableOpacity>
+          </View>
+        </CameraView>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['left', 'right']}>
@@ -53,7 +97,7 @@ export default function ScanQRcode({ navigation }) {
         <TouchableOpacity
           style={styles.cameraBox}
           activeOpacity={0.8}
-          onPress={() => alert('จำลองการเปิดกล้องสแกน QR Code')}
+          onPress={handleOpenCamera} // 🟢 เรียกฟังก์ชันเปิดกล้อง
         >
           <Feather name="camera" size={70} color="#1A1A1A" />
         </TouchableOpacity>
@@ -187,4 +231,16 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  cameraOverlay: { // 🟢 กรอบทับกล้อง
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 50,
+  },
+  closeCameraBtn: { // 🟢 ปุ่มปิดกล้อง
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    padding: 20,
+    borderRadius: 50,
+    alignItems: 'center'
+  }
 });

@@ -4,51 +4,45 @@ const bcrypt = require("bcrypt");
 const transporter = require("../config/mailer");
 const sendOTP = require("../utils/sendOTP");
 
+// ==========================================
+// 1. REGISTER
+// ==========================================
 exports.register = async (req, res) => {
   try {
     const {
+      role, // รับค่า 'petowner' หรือ 'vet' จากแอปมือถือ
       firstname,
       lastname,
       email,
       password,
-      phone_number,
+      phone_number
     } = req.body;
 
-    if (
-      !firstname ||
-      !lastname ||
-      !email ||
-      !password ||
-      !phone_number
-    ) {
-      return res.status(400).json({
-        message: "Please fill all fields",
-      });
+    if (!firstname || !lastname || !email || !password || !phone_number) {
+      return res.status(400).json({ message: "Please fill all fields" });
     }
+
+    // ตรวจสอบว่า Email ซ้ำหรือไม่
     const { data: existUser, error: existError } = await supabase
       .from("users")
       .select("user_id")
       .eq("email", email)
       .maybeSingle();
 
-    if (existError) {
-      return res.status(500).json({
-        message: existError.message,
-      });
-    }
+    if (existError) return res.status(500).json({ message: existError.message });
+    if (existUser) return res.status(400).json({ message: "Email already exists" });
 
-    if (existUser) {
-      return res.status(400).json({
-        message: "Email already exists",
-      });
-    }
-
+    // แปลงรหัสผ่าน (Hash)
     const password_hash = await bcrypt.hash(password, 10);
 
+    // กำหนด Role ให้ถูกต้อง (เพื่อนำไปบันทึกลงฐานข้อมูล)
+    const dbRole = role === "vet" ? "vet" : "pet_owner";
+
+    // บันทึกลงตาราง users
     const { data: userData, error: userError } = await supabase
       .from("users")
       .insert({
-        role: "pet_owner",
+        role: dbRole,
         email,
         password_hash,
         verified: false,
@@ -57,43 +51,46 @@ exports.register = async (req, res) => {
       .select()
       .single();
 
-    if (userError) {
-      return res.status(400).json({
-        message: userError.message,
-      });
+    if (userError) return res.status(400).json({ message: userError.message });
+
+    // แยกบันทึกข้อมูลโปรไฟล์ตาม Role
+    if (dbRole === "pet_owner") {
+      const { error: ownerError } = await supabase
+        .from("pet_owners")
+        .insert({
+          user_id: userData.user_id,
+          firstname,
+          lastname,
+          phone: phone_number,
+          profile_image_url: null,
+          profile_image_public_id: null,
+        });
+
+      if (ownerError) {
+        await supabase.from("users").delete().eq("user_id", userData.user_id);
+        return res.status(400).json({ message: ownerError.message });
+      }
+    } else if (dbRole === "vet") {
+      const { error: vetError } = await supabase
+        .from("vet") 
+        .insert({
+          user_id: userData.user_id,
+          firstname,
+          lastname,
+          phone: phone_number,
+          profile_image_url: null,
+          profile_image_public_id: null
+        });
+
+      if (vetError) {
+        await supabase.from("users").delete().eq("user_id", userData.user_id);
+        return res.status(400).json({ message: vetError.message });
+      }
     }
 
-    const { error: ownerError } = await supabase
-      .from("pet_owners")
-      .insert({
-        user_id: userData.user_id,
-        firstname,
-        lastname,
-        phone: phone_number,
-        profile_image_url: null,
-        profile_image_public_id: null,
-      });
-
-    if (ownerError) {
-      await supabase
-        .from("users")
-        .delete()
-        .eq("user_id", userData.user_id);
-
-      return res.status(400).json({
-        message: ownerError.message,
-      });
-    }
-
-
-    const otp = Math.floor(
-      100000 + Math.random() * 900000
-    ).toString();
-
-    // OTP หมดอายุ 5 นาที
-    const expiresAt = new Date(
-      Date.now() + 5 * 60 * 1000
-    ).toISOString();
+    // สร้างและส่ง OTP ยืนยันอีเมล
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
     const { error: otpError } = await supabase
       .from("otp")
@@ -107,30 +104,21 @@ exports.register = async (req, res) => {
 
     if (otpError) {
       console.error("OTP Error:", otpError);
-
-      // ลบข้อมูลที่สร้างไปก่อนหน้า
-      await supabase
-        .from("pet_owners")
-        .delete()
-        .eq("user_id", userData.user_id);
-
-      await supabase
-        .from("users")
-        .delete()
-        .eq("user_id", userData.user_id);
-
-      return res.status(500).json({
-        message: otpError.message,
-      });
+      // ทำการ Rollback ข้อมูล
+      if (dbRole === "pet_owner") {
+        await supabase.from("pet_owners").delete().eq("user_id", userData.user_id);
+      } else {
+        await supabase.from("vet").delete().eq("user_id", userData.user_id);
+      }
+      await supabase.from("users").delete().eq("user_id", userData.user_id);
+      return res.status(500).json({ message: otpError.message });
     }
+
     try {
       await sendOTP(email, otp);
     } catch (emailError) {
       console.error("Send OTP Error:", emailError);
-
-      return res.status(500).json({
-        message: "Register successful but failed to send OTP",
-      });
+      return res.status(500).json({ message: "Register successful but failed to send OTP" });
     }
 
     return res.status(201).json({
@@ -141,57 +129,37 @@ exports.register = async (req, res) => {
 
   } catch (error) {
     console.error("Register Error:", error);
-
-    return res.status(500).json({
-      message: "Internal Server Error",
-    });
+    return res.status(500).json({ message: "Internal Server Error" });
   }
 };
-// login
+
+// LOGIN
 exports.login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // 1. หา User จากตาราง users
+    // หา User จากตาราง users
     const { data: user, error } = await supabase
       .from("users")
       .select("*")
       .eq("email", email)
       .single();
 
-    // ไม่พบ Email
     if (error || !user) {
-      return res.status(401).json({
-        message: "ไม่พบอีเมลนี้ในระบบ",
-      });
+      return res.status(401).json({ message: "ไม่พบอีเมลนี้ในระบบ" });
     }
 
-    // 2. ตรวจสอบ Password ก่อน
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password_hash
-    );
-
+    // ตรวจสอบ Password
+    const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) {
-      return res.status(401).json({
-        message: "รหัสผ่านไม่ถูกต้อง",
-      });
+      return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
     }
 
-    // 3. ถ้ายังไม่ได้ Verify
+    // ถ้ายังไม่ได้ Verify
     if (!user.verified) {
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-      // สร้าง OTP ใหม่
-      const otp = Math.floor(
-        100000 + Math.random() * 900000
-      ).toString();
-
-      // OTP หมดอายุใน 5 นาที
-      const expiresAt = new Date(
-        Date.now() + 5 * 60 * 1000
-      ).toISOString();
-
-      // บันทึก OTP
       const { error: otpError } = await supabase
         .from("otp")
         .insert({
@@ -202,26 +170,14 @@ exports.login = async (req, res) => {
           expires_at: expiresAt,
         });
 
-      if (otpError) {
-        console.error("Create OTP Error:", otpError);
+      if (otpError) return res.status(500).json({ message: "ไม่สามารถสร้าง OTP ได้" });
 
-        return res.status(500).json({
-          message: "ไม่สามารถสร้าง OTP ได้",
-        });
-      }
-
-      // ส่ง OTP ทาง Email
       try {
         await sendOTP(email, otp);
       } catch (emailError) {
-        console.error("Send OTP Error:", emailError);
-
-        return res.status(500).json({
-          message: "ไม่สามารถส่ง OTP ได้",
-        });
+        return res.status(500).json({ message: "ไม่สามารถส่ง OTP ได้" });
       }
 
-      // ส่งกลับไปให้ Mobile
       return res.status(403).json({
         message: "กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ",
         require_otp: true,
@@ -229,31 +185,22 @@ exports.login = async (req, res) => {
       });
     }
 
-    // 4. ถ้า Verify แล้ว → สร้าง JWT
+    // ถ้า Verify แล้ว → สร้าง JWT
     const token = jwt.sign(
-      {
-        user_id: user.user_id,
-        email: user.email,
-        role: user.role,
-      },
+      { user_id: user.user_id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
-      {
-        expiresIn: "7d",
-      }
+      { expiresIn: "7d" }
     );
 
-    // 🔥 5. ค้นหาข้อมูล Pet Owner ของ User คนนี้ (เพิ่มส่วนนี้เข้ามา)
-    const { data: petOwnerData, error: ownerError } = await supabase
-      .from("pet_owners")
-      .select("*")
-      .eq("user_id", user.user_id)
-      .maybeSingle();
-
-    if (ownerError) {
-      console.error("Fetch Pet Owner Error:", ownerError);
+    let profileData = null;
+    if (user.role === "pet_owner") {
+      const { data } = await supabase.from("pet_owners").select("*").eq("user_id", user.user_id).maybeSingle();
+      profileData = data;
+    } else if (user.role === "vet") {
+      const { data } = await supabase.from("vet").select("*").eq("user_id", user.user_id).maybeSingle();
+      profileData = data;
     }
 
-    // 🔥 6. Login สำเร็จ (เพิ่ม pet_owner ส่งกลับไปใน Response ด้วย)
     return res.status(200).json({
       message: "เข้าสู่ระบบสำเร็จ!",
       token: token,
@@ -262,56 +209,35 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
       },
-      pet_owner: petOwnerData || null // ส่งข้อมูลโปรไฟล์กลับไปให้แอปเซฟ
+      profile: profileData || null 
     });
 
   } catch (err) {
     console.error("Login Error:", err);
-
-    return res.status(500).json({
-      message: "เกิดข้อผิดพลาดที่เซิร์ฟเวอร์",
-    });
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดที่เซิร์ฟเวอร์" });
   }
 };
 
+// VERIFY OTP
 exports.verifyOTP = async (req, res) => {
   try {
     const { email, otp } = req.body;
 
-    console.log("===== VERIFY OTP =====");
-    console.log("email:", email);
-    console.log("otp:", otp);
-
     if (!email || !otp) {
-      return res.status(400).json({
-        message: "Email and OTP are required",
-      });
+      return res.status(400).json({ message: "Email and OTP are required" });
     }
 
-    // 1. หา User
+    // หา User
     const { data: user, error: userError } = await supabase
       .from("users")
       .select("user_id, email, verified")
       .eq("email", email)
       .single();
 
-    if (userError) {
-      console.error("USER ERROR:", userError);
+    if (userError) return res.status(500).json({ message: userError.message });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-      return res.status(500).json({
-        message: userError.message,
-      });
-    }
-
-    if (!user) {
-      return res.status(404).json({
-        message: "User not found",
-      });
-    }
-
-    console.log("USER:", user);
-
-    // 2. หา OTP
+    // หา OTP
     const { data: otpData, error: otpError } = await supabase
       .from("otp")
       .select("*")
@@ -323,134 +249,85 @@ exports.verifyOTP = async (req, res) => {
       .limit(1)
       .maybeSingle();
 
-    if (otpError) {
-      console.error("OTP ERROR:", otpError);
+    if (otpError) return res.status(500).json({ message: otpError.message });
+    if (!otpData) return res.status(400).json({ message: "Invalid OTP" });
 
-      return res.status(500).json({
-        message: otpError.message,
-      });
-    }
-
-    if (!otpData) {
-      return res.status(400).json({
-        message: "Invalid OTP",
-      });
-    }
-
-    console.log("OTP DATA:", otpData);
-
-    // 3. ตรวจสอบหมดอายุ
+    // ตรวจสอบหมดอายุ
     if (new Date(otpData.expires_at) < new Date()) {
-      await supabase
-        .from("otp")
-        .update({
-          status: "expired",
-        })
-        .eq("otp_id", otpData.otp_id);
-
-      return res.status(400).json({
-        message: "OTP has expired",
-      });
+      await supabase.from("otp").update({ status: "expired" }).eq("otp_id", otpData.otp_id);
+      return res.status(400).json({ message: "OTP has expired" });
     }
 
-    // 4. ยืนยัน User
+    // ยืนยัน User
     const { error: updateUserError } = await supabase
       .from("users")
-      .update({
-        verified: true,
-      })
+      .update({ verified: true })
       .eq("user_id", user.user_id);
 
-    if (updateUserError) {
-      console.error("UPDATE USER ERROR:", updateUserError);
+    if (updateUserError) return res.status(500).json({ message: updateUserError.message });
 
-      return res.status(500).json({
-        message: updateUserError.message,
-      });
-    }
-
-    // 5. เปลี่ยน OTP เป็น used
+    // เปลี่ยน OTP เป็น used
     const { error: updateOTPError } = await supabase
       .from("otp")
-      .update({
-        status: "used",
-      })
+      .update({ status: "used" })
       .eq("otp_id", otpData.otp_id);
 
-    if (updateOTPError) {
-      console.error("UPDATE OTP ERROR:", updateOTPError);
+    if (updateOTPError) return res.status(500).json({ message: updateOTPError.message });
 
-      return res.status(500).json({
-        message: updateOTPError.message,
-      });
-    }
-
-    console.log("OTP VERIFIED SUCCESSFULLY");
-
-    return res.status(200).json({
-      message: "OTP verified successfully",
-    });
+    return res.status(200).json({ message: "OTP verified successfully" });
 
   } catch (error) {
     console.error("VERIFY OTP ERROR:", error);
-
-    return res.status(500).json({
-      message: error.message,
-    });
+    return res.status(500).json({ message: error.message });
   }
 };
+
+// RESEND OTP
 exports.resendOTP = async (req, res) => {
   try {
     const { email } = req.body;
 
     if (!email) {
-      return res.status(400).json({
-        message: "Email is required",
-      });
+      return res.status(400).json({ message: "Email is required" });
     }
 
-    // หา User
-    const [users] = await db.query(
-      "SELECT * FROM users WHERE email = ?",
-      [email]
-    );
+    const { data: user, error: userError } = await supabase
+      .from("users")
+      .select("user_id")
+      .eq("email", email)
+      .maybeSingle();
 
-    if (users.length === 0) {
-      return res.status(404).json({
-        message: "User not found",
-      });
-    }
-
-    const user = users[0];
+    if (userError) return res.status(500).json({ message: userError.message });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     // สร้าง OTP 6 หลัก
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
-    // หมดอายุ 5 นาที
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    // บันทึก OTP ด้วย Supabase
+    const { error: otpError } = await supabase
+      .from("otp")
+      .insert({
+        user_id: user.user_id,
+        otp_code: otp,
+        type: "register",
+        status: "pending",
+        expires_at: expiresAt
+      });
 
-    // บันทึก OTP
-    await db.query(
-      `INSERT INTO otp
-       (user_id, otp, expires_at, used)
-       VALUES (?, ?, ?, 0)`,
-      [user.user_id, otp, expiresAt]
-    );
+    if (otpError) return res.status(500).json({ message: "Server error" });
 
     // ส่ง Email
-    // await sendOTPEmail(email, otp);
+    try {
+      await sendOTP(email, otp);
+    } catch (emailError) {
+      return res.status(500).json({ message: "Failed to send OTP email" });
+    }
 
-    console.log("New OTP:", otp);
-
-    return res.status(200).json({
-      message: "OTP has been sent again",
-    });
+    return res.status(200).json({ message: "OTP has been sent again" });
 
   } catch (error) {
-    console.error(error);
-
-    return res.status(500).json({
-      message: "Server error",
-    });
+    console.error("RESEND OTP ERROR:", error);
+    return res.status(500).json({ message: "Server error" });
   }
 };

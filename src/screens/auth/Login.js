@@ -5,7 +5,8 @@ import * as SecureStore from "expo-secure-store";
 import Checkbox from 'expo-checkbox';
 import { API_URL } from '../../config';
 
-export default function Login({ navigation, setIsLoggedIn }) {
+
+export default function Login({ navigation, onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -61,12 +62,13 @@ export default function Login({ navigation, setIsLoggedIn }) {
         "user",
         JSON.stringify(result.user)
       );
-
-      if (result.pet_owner) {
-        await SecureStore.setItemAsync(
-          "pet_owners",
-          JSON.stringify(result.pet_owner)
-        );
+      // ตรวจสอบ Role และบันทึก Profile ให้ถูกประเภท
+      if (result.profile) {
+        if (result.user.role === 'vet') {
+          await SecureStore.setItemAsync("vet_profile", JSON.stringify(result.profile));
+        } else {
+          await SecureStore.setItemAsync("pet_owners", JSON.stringify(result.profile));
+        }
       }
 
       Alert.alert(
@@ -76,19 +78,15 @@ export default function Login({ navigation, setIsLoggedIn }) {
           {
             text: "ตกลง",
             onPress: () => {
-              setIsLoggedIn(true);
+              // เรียกใช้ฟังก์ชันที่รับมา พร้อมส่ง Role ไปให้ App.js
+              onLoginSuccess(result.user.role);
             },
           },
         ]
       );
     } catch (error) {
       console.log("LOGIN ERROR:", error);
-
-      Alert.alert(
-        "Error",
-        "ไม่สามารถเชื่อมต่อ Server ได้"
-      );
-
+      Alert.alert("Error", "ไม่สามารถเชื่อมต่อ Server ได้");
     } finally {
       setLoading(false);
     }

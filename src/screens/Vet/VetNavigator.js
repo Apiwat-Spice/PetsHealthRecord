@@ -16,7 +16,7 @@ const SearchPlaceholder = () => (
 
 const Tab = createBottomTabNavigator();
 
-export default function VetNavigator() {
+export default function VetNavigator({setIsLoggedIn}) {
   return (
     <Tab.Navigator
       initialRouteName="Dashboard"
@@ -77,14 +77,16 @@ export default function VetNavigator() {
       {/* โปรไฟล์ */}
       <Tab.Screen
         name="Profile"
-        component={ProfileVET}
         options={{
           tabBarLabel: 'โปรไฟล์',
           tabBarIcon: ({ color }) => (
             <MaterialCommunityIcons name="stethoscope" size={26} color={color} />
           ),
         }}
-      />
+      >
+        {(props) => <ProfileVET {...props} setIsLoggedIn={setIsLoggedIn} />}
+      </Tab.Screen>
+
     </Tab.Navigator>
   );
 }
