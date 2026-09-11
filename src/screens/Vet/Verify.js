@@ -217,7 +217,7 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
         </TouchableOpacity>
         <HistoryModal />
 
-        {/* 🟢 นำ ImageView มาแทนที่ ImageViewer */}
+        {/* ดูรูปภาพและซูม */}
         <ImageView
           images={fullScreenImage ? [{ uri: fullScreenImage }] : []}
           imageIndex={0}
@@ -245,7 +245,7 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
         </TouchableOpacity>
         <HistoryModal />
 
-        {/* 🟢 นำ ImageView มาแทนที่ ImageViewer */}
+        {/* ดูรูปภาพและซูม */}
         <ImageView
           images={fullScreenImage ? [{ uri: fullScreenImage }] : []}
           imageIndex={0}
@@ -278,7 +278,7 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
         </View>
         <HistoryModal />
 
-        {/* 🟢 นำ ImageView มาแทนที่ ImageViewer */}
+        {/* ดูรูปภาพและซูม */}
         <ImageView
           images={fullScreenImage ? [{ uri: fullScreenImage }] : []}
           imageIndex={0}

@@ -12,15 +12,11 @@ cloudinary.config({
 // ==========================================
 exports.uploadVetLicense = async (req, res) => {
     try {
-        // เพิ่มรับค่าตัวแปรวันหมดอายุและ vet_class จาก Frontend
         const { vet_id, vet_license_expired, vet_id_card_expired, vet_class } = req.body;
         const files = req.files;
 
         console.log("==== 📥 [API] ได้รับคำขอส่งเอกสาร ====");
         console.log("📝 vet_id ที่แอปส่งมาคือ:", vet_id);
-        console.log("📅 วันหมดอายุใบประกอบฯ:", vet_license_expired);
-        console.log("📅 วันหมดอายุบัตรประจำตัว:", vet_id_card_expired);
-        console.log("🎓 ระดับชั้นของสัตวแพทย์:", vet_class);
 
         if (!files || !files.vet_license_pdf || !files.vet_id_card_pdf) {
             return res.status(400).json({ message: "กรุณาอัปโหลดเอกสารให้ครบทั้ง 2 ไฟล์" });
@@ -30,9 +26,9 @@ exports.uploadVetLicense = async (req, res) => {
             return new Promise((resolve, reject) => {
                 const stream = cloudinary.uploader.upload_stream(
                     {
-                        resource_type: "image", // 🟢 1. บังคับให้มองเป็นรูปภาพ
+                        resource_type: "image",
                         folder: folder,
-                        format: "jpg" // 🟢 2. แปลงไฟล์ทุกชนิด (รวมถึง PDF) ให้กลายเป็น JPG ทันที
+                        format: "jpg"
                     },
                     (error, result) => {
                         if (error) reject(error); else resolve(result);
@@ -42,51 +38,51 @@ exports.uploadVetLicense = async (req, res) => {
             });
         };
 
-        // เก็บใบประกอบวิชาชีพลงโฟลเดอร์ vet_licenes
-        const licenseResult = await uploadToCloudinary(files.vet_license_pdf[0].buffer, "vet_documents/vet_licenes");
+        // 🟢 ตรวจสอบว่าเคยมีรูปเก่าไหม ถ้ามีให้ลบทิ้งก่อน
+        const { data: oldLicense } = await supabase
+            .from('vet_license')
+            .select('vet_license_pdf_public_id, vet_id_card_pdf_public_id')
+            .eq('vet_id', vet_id)
+            .single();
 
-        // เก็บบัตรประจำตัวลงโฟลเดอร์ vet_id
+        if (oldLicense) {
+            if (oldLicense.vet_license_pdf_public_id) {
+                await cloudinary.uploader.destroy(oldLicense.vet_license_pdf_public_id).catch(err => console.log("ลบรูปเก่า license ไม่สำเร็จ", err));
+            }
+            if (oldLicense.vet_id_card_pdf_public_id) {
+                await cloudinary.uploader.destroy(oldLicense.vet_id_card_pdf_public_id).catch(err => console.log("ลบรูปเก่า id card ไม่สำเร็จ", err));
+            }
+        }
+
+        const licenseResult = await uploadToCloudinary(files.vet_license_pdf[0].buffer, "vet_documents/vet_licenes");
         const idCardResult = await uploadToCloudinary(files.vet_id_card_pdf[0].buffer, "vet_documents/vet_id");
 
         console.log("✅ อัปโหลด Cloudinary สำเร็จ");
 
-        // 🟢 1. ทำการอัปเดตข้อมูล vet_class ลงในตาราง vet
         if (vet_class) {
             const { error: vetUpdateError } = await supabase
                 .from('vet')
-                .update({ vet_class: parseInt(vet_class) }) // แปลงเป็นตัวเลข (smallint)
+                .update({ vet_class: parseInt(vet_class) })
                 .eq('vet_id', vet_id);
-
-            if (vetUpdateError) {
-                console.error("❌ Error Update ตาราง vet:", vetUpdateError);
-                throw vetUpdateError;
-            }
-            console.log("✅ อัปเดต vet_class ลงตาราง vet สำเร็จ");
+            if (vetUpdateError) throw vetUpdateError;
         }
 
-        // 🟢 2. บันทึกข้อมูลเอกสารลงตาราง vet_license (ใช้ upsert และใส่ฟิลด์วันหมดอายุลงไป)
         const { data: licenseData, error: licenseError } = await supabase
             .from('vet_license')
             .upsert({
                 vet_id: vet_id,
                 vet_license_pdf_url: licenseResult.secure_url,
                 vet_license_pdf_public_id: licenseResult.public_id,
-                vet_license_expired: vet_license_expired || null, // บันทึกวันหมดอายุ
+                vet_license_expired: vet_license_expired || null,
                 vet_id_card_pdf_url: idCardResult.secure_url,
                 vet_id_card_pdf_public_id: idCardResult.public_id,
-                vet_id_card_expired: vet_id_card_expired || null // บันทึกวันหมดอายุ
+                vet_id_card_expired: vet_id_card_expired || null
             }, { onConflict: 'vet_id' })
             .select('*')
             .single();
 
-        if (licenseError) {
-            console.error("❌ Error ตาราง vet_license:", licenseError);
-            throw licenseError;
-        }
+        if (licenseError) throw licenseError;
 
-        console.log("✅ บันทึกลง vet_license สำเร็จ ได้ ID:", licenseData.vet_license_id);
-
-        // 🟢 3. บันทึกข้อมูลลงตาราง vet_license_document
         const { data: docData, error: documentError } = await supabase
             .from('vet_license_document')
             .insert({
@@ -95,12 +91,8 @@ exports.uploadVetLicense = async (req, res) => {
             })
             .select('*');
 
-        if (documentError) {
-            console.error("❌ Error ตาราง vet_license_document:", documentError);
-            throw documentError;
-        }
+        if (documentError) throw documentError;
 
-        console.log("✅ บันทึกลง vet_license_document สำเร็จ ข้อมูลเข้าครบสมบูรณ์!");
         return res.status(200).json({ message: "ส่งเอกสารยืนยันตัวตนสำเร็จ!" });
 
     } catch (error) {
@@ -115,46 +107,33 @@ exports.uploadVetLicense = async (req, res) => {
 exports.checkVetStatus = async (req, res) => {
     try {
         const vetId = req.params.vetId || req.params.userId;
+        if (!vetId || vetId === 'undefined') return res.status(200).json({ status: 'unsubmitted' });
 
-        if (!vetId || vetId === 'undefined') {
-            return res.status(200).json({ status: 'unsubmitted' });
-        }
-
-        // 1. ดึงข้อมูลเอกสารทั้งหมด (URL, วันที่) จาก vet_license
         const { data: licenseData, error: licenseError } = await supabase
             .from('vet_license')
             .select('*')
             .eq('vet_id', vetId)
             .order('created_at', { ascending: false });
 
-        if (!licenseData || licenseData.length === 0) {
-            return res.status(200).json({ status: 'unsubmitted' });
-        }
+        if (!licenseData || licenseData.length === 0) return res.status(200).json({ status: 'unsubmitted' });
 
-        const latestLicense = licenseData[0]; // เอาใบเอกสารล่าสุด
+        const latestLicense = licenseData[0];
 
-        // 2. 🟢 ดึงสถานะและหมายเหตุจาก vet_license_document (ดึงเฉพาะอันที่ใหม่ที่สุด)
         const { data: docData, error: docError } = await supabase
             .from('vet_license_document')
             .select('status, detail')
             .eq('vet_license_id', latestLicense.vet_license_id)
-            .order('created_at', { ascending: false }) // 👈 เรียงตามเวลาที่สร้างล่าสุด
-            .limit(1); // 👈 ดึงมาแค่อันเดียว ป้องกัน Error หาเจอหลายแถว
+            .order('created_at', { ascending: false })
+            .limit(1);
 
-        if (docError) {
-            console.error("❌ Error querying document:", docError);
-        }
-
-        // 3. ดึงระดับชั้นสัตวแพทย์จากตาราง vet
         const { data: vetData } = await supabase
             .from('vet')
             .select('vet_class')
             .eq('vet_id', vetId)
             .single();
 
-        // 🟢 เปลี่ยนวิธีเช็ก docData จาก Object เป็น Array
         if (docData && docData.length > 0) {
-            const latestDoc = docData[0]; // เลือกข้อมูลแถวแรก (ที่ใหม่ที่สุด)
+            const latestDoc = docData[0];
             return res.status(200).json({
                 status: latestDoc.status,
                 detail: latestDoc.detail,
@@ -188,7 +167,12 @@ exports.createClinicRequest = async (req, res) => {
         const uploadToCloudinary = (fileBuffer, folder) => {
             return new Promise((resolve, reject) => {
                 const stream = cloudinary.uploader.upload_stream(
-                    { resource_type: "auto", folder: folder },
+                    {
+                        resource_type: "image", // 🟢 บังคับให้อ่านเป็นรูปภาพ
+                        folder: folder,
+                        format: "jpg" // 🟢 สั่งแปลง PDF ให้กลายเป็น JPG
+                    },
+                    // ❌ ลบชุดคำสั่ง options อันที่สองออกไปแล้ว
                     (error, result) => {
                         if (error) reject(error);
                         else resolve(result);
@@ -197,6 +181,22 @@ exports.createClinicRequest = async (req, res) => {
                 stream.end(fileBuffer);
             });
         };
+
+        // 🟢 ตรวจสอบว่าเคยมีรูปเก่าไหม ถ้ามีให้ลบทิ้งก่อน
+        const { data: oldClinicLicense } = await supabase
+            .from('clinic_license')
+            .select('ss3_license_public_id, ss4_license_public_id')
+            .eq('vet_id', data.vet_id)
+            .single();
+
+        if (oldClinicLicense) {
+            if (oldClinicLicense.ss3_license_public_id) {
+                await cloudinary.uploader.destroy(oldClinicLicense.ss3_license_public_id).catch(err => console.log("ลบรูปเก่า SS3 ไม่สำเร็จ", err));
+            }
+            if (oldClinicLicense.ss4_license_public_id) {
+                await cloudinary.uploader.destroy(oldClinicLicense.ss4_license_public_id).catch(err => console.log("ลบรูปเก่า SS4 ไม่สำเร็จ", err));
+            }
+        }
 
         console.log("1. กำลังอัปโหลดเอกสารคลินิกขึ้น Cloud...");
         const ss3Result = await uploadToCloudinary(files.ss3_license_pdf[0].buffer, "clinic_documents/ss.3");
@@ -210,16 +210,15 @@ exports.createClinicRequest = async (req, res) => {
                 vet_id: data.vet_id,
                 ss3_license_url: ss3Result.secure_url,
                 ss3_license_public_id: ss3Result.public_id,
+                ss3_license_expired: data.ss3_license_expired || null,
                 ss4_license_url: ss4Result.secure_url,
-                ss4_license_public_id: ss4Result.public_id
+                ss4_license_public_id: ss4Result.public_id,
+                ss4_license_expired: data.ss4_license_expired || null
             }, { onConflict: 'vet_id' })
             .select('clinic_license_id')
             .single();
 
-        if (clinicLicenseError) {
-            console.error("Clinic License Upsert Error:", clinicLicenseError);
-            throw clinicLicenseError;
-        }
+        if (clinicLicenseError) throw clinicLicenseError;
 
         const { data: addressData, error: addressError } = await supabase
             .from('vetclinic_address')
@@ -236,10 +235,7 @@ exports.createClinicRequest = async (req, res) => {
             .select('vetclinic_address_id')
             .single();
 
-        if (addressError) {
-            console.error("Address Insert Error:", addressError);
-            throw addressError;
-        }
+        if (addressError) throw addressError;
 
         const { error: documentError } = await supabase
             .from('vet_clinic_document')
@@ -249,10 +245,7 @@ exports.createClinicRequest = async (req, res) => {
                 status: 'pending'
             });
 
-        if (documentError) {
-            console.error("Vet Clinic Document Insert Error:", documentError);
-            throw documentError;
-        }
+        if (documentError) throw documentError;
 
         console.log("✅ ส่งคำขอคลินิกและบันทึกลง Document สำเร็จ!");
         return res.status(200).json({ message: "ส่งคำขอสร้างสถานพยาบาลเรียบร้อยแล้ว!" });
@@ -277,9 +270,7 @@ exports.checkClinicStatus = async (req, res) => {
             .order('created_at', { ascending: false })
             .limit(1);
 
-        if (!licenseData || licenseData.length === 0) {
-            return res.status(200).json({ status: 'unsubmitted' });
-        }
+        if (!licenseData || licenseData.length === 0) return res.status(200).json({ status: 'unsubmitted' });
 
         const latestLicenseId = licenseData[0].clinic_license_id;
 
@@ -288,11 +279,11 @@ exports.checkClinicStatus = async (req, res) => {
             .select('status, detail')
             .eq('clinic_license_id', latestLicenseId)
             .order('created_at', { ascending: false })
-            .limit(1)
-            .single();
+            .limit(1); // แก้ไขแบบเดียวกับ vet
 
-        if (docData) {
-            return res.status(200).json({ status: docData.status, detail: docData.detail });
+        if (docData && docData.length > 0) {
+            const latestDoc = docData[0];
+            return res.status(200).json({ status: latestDoc.status, detail: latestDoc.detail });
         } else {
             return res.status(200).json({ status: 'unsubmitted' });
         }
