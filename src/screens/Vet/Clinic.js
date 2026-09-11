@@ -153,8 +153,8 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
         const address = clinicSubmittedDocs.address || {};
 
         //  ดูตัวแปรที่รับมา เผื่อเช็กความถูกต้อง
-        console.log("clinic_name: ", clinicSubmittedDocs.clinic_name);
-        console.log("operating_hours: ", clinicSubmittedDocs.operating_hours);
+        // console.log("clinic_name: ", clinicSubmittedDocs.clinic_name);
+        // console.log("operating_hours: ", clinicSubmittedDocs.operating_hours);
 
         return (
             <View style={styles.submittedInfoContainer}>
