@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, ScrollView, Modal, Linking } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, ScrollView, Modal, Linking, Image } from 'react-native';
 import { MaterialCommunityIcons, Feather } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
 import { API_URL } from '../../config';
+import ImageView from "react-native-image-viewing";
 
 export default function Verify({ vetProfile, verificationStatus, setVerificationStatus, verificationDetail, submittedDocs }) {
   const [licenseFile, setLicenseFile] = useState(null);
@@ -16,6 +17,9 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
   const [vetClass, setVetClass] = useState("1");
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // 🟢 State สำหรับจัดการการแสดงรูปภาพแบบเต็มจอ
+  const [fullScreenImage, setFullScreenImage] = useState(null);
 
   const handleSelectFile = async (docType) => {
     try {
@@ -104,7 +108,7 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
       }
 
       if (response.ok) {
-        Alert.alert('ส่งเอกสารสำเร็จ!', 'ระบบได้รับเอกสารของคุณแล้ว โปรดรอผู้ดูแลระบบตรวจสอบครับ');
+        Alert.alert('ส่งเอกสารสำเร็จ!', 'ระบบได้รับเอกสารของคุณแล้ว โปรดรอตรวจสอบครับ');
         setVerificationStatus('pending');
       } else {
         Alert.alert('เกิดข้อผิดพลาดจากเซิร์ฟเวอร์', result.message || 'อัปโหลดไม่สำเร็จ');
@@ -116,15 +120,9 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
     }
   };
 
-  const openDocument = (url) => {
-    if (url) {
-      Linking.openURL(url).catch(err => Alert.alert('ข้อผิดพลาด', 'ไม่สามารถเปิดเอกสารได้'));
-    } else {
-      Alert.alert('แจ้งเตือน', 'ไม่พบไฟล์เอกสารในระบบ');
-    }
-  };
 
-  // 🟢 Component HistoryModal (โฉมใหม่ แสดงครบทุกอย่าง)
+
+  // Component ประวัติการส่งเอกสาร
   const HistoryModal = () => (
     <Modal visible={showHistoryModal} transparent={true} animationType="fade">
       <View style={styles.modalOverlay}>
@@ -137,7 +135,6 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false}>
-            {/* แสดงหมายเหตุจากแอดมินด้านบนสุด ถ้ามี */}
             {verificationDetail && (
               <View style={[styles.detailBox, { marginTop: 0, marginBottom: 16 }]}>
                 <Text style={styles.detailLabel}>หมายเหตุจากแอดมิน:</Text>
@@ -157,25 +154,45 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
             <View style={styles.historyItem}>
               <Text style={styles.historyLabel}>1. ใบอนุญาตประกอบวิชาชีพ</Text>
               <Text style={styles.historySubText}>หมดอายุ: {formatDate(submittedDocs?.vet_license_expired)}</Text>
-              <TouchableOpacity
-                style={styles.viewDocBtn}
-                onPress={() => openDocument(submittedDocs?.vet_license_pdf_url)}
-              >
-                <Feather name="file-text" size={16} color="#0055B3" style={{ marginRight: 6 }} />
-                <Text style={styles.viewDocText}>เปิดดูเอกสาร (PDF)</Text>
-              </TouchableOpacity>
+
+              {/* 🟢 ส่วนแสดง Preview รูปภาพ แทนที่ปุ่มกดเดิม */}
+              {submittedDocs?.vet_license_pdf_url ? (
+                <TouchableOpacity onPress={() => setFullScreenImage(submittedDocs.vet_license_pdf_url)}>
+                  <Image
+                    source={{ uri: submittedDocs.vet_license_pdf_url }}
+                    style={styles.previewImage}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.previewOverlay}>
+                    <Feather name="zoom-in" size={20} color="#FFF" />
+                    <Text style={styles.previewText}>กดเพื่อดูรูปเต็ม</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.noDocText}>ไม่พบไฟล์เอกสาร</Text>
+              )}
             </View>
 
             <View style={[styles.historyItem, { borderBottomWidth: 0, paddingBottom: 0 }]}>
               <Text style={styles.historyLabel}>2. บัตรประจำตัวสัตวแพทย์</Text>
               <Text style={styles.historySubText}>หมดอายุ: {formatDate(submittedDocs?.vet_id_card_expired)}</Text>
-              <TouchableOpacity
-                style={styles.viewDocBtn}
-                onPress={() => openDocument(submittedDocs?.vet_id_card_pdf_url)}
-              >
-                <Feather name="file-text" size={16} color="#0055B3" style={{ marginRight: 6 }} />
-                <Text style={styles.viewDocText}>เปิดดูเอกสาร (PDF)</Text>
-              </TouchableOpacity>
+
+              {/* 🟢 ส่วนแสดง Preview รูปภาพ */}
+              {submittedDocs?.vet_id_card_pdf_url ? (
+                <TouchableOpacity onPress={() => setFullScreenImage(submittedDocs.vet_id_card_pdf_url)}>
+                  <Image
+                    source={{ uri: submittedDocs.vet_id_card_pdf_url }}
+                    style={styles.previewImage}
+                    resizeMode="cover"
+                  />
+                  <View style={styles.previewOverlay}>
+                    <Feather name="zoom-in" size={20} color="#FFF" />
+                    <Text style={styles.previewText}>กดเพื่อดูรูปเต็ม</Text>
+                  </View>
+                </TouchableOpacity>
+              ) : (
+                <Text style={styles.noDocText}>ไม่พบไฟล์เอกสาร</Text>
+              )}
             </View>
           </ScrollView>
         </View>
@@ -183,7 +200,7 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
     </Modal>
   );
 
-  // 🟢 1. สถานะ ผ่านแล้ว (เพิ่มปุ่มกดดูประวัติ และ โชว์คำชมจากแอดมิน)
+  // สถานะ ผ่านแล้ว
   if (verificationStatus === 'pass') {
     return (
       <View style={[styles.verifiedBox, { flexDirection: 'column', alignItems: 'flex-start' }]}>
@@ -195,18 +212,24 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.historyBtnOutline, { borderColor: '#00C853', marginTop: 16, width: '100%' }]}
-          onPress={() => setShowHistoryModal(true)}
-        >
+        <TouchableOpacity style={[styles.historyBtnOutline, { borderColor: '#00C853', marginTop: 16, width: '100%' }]} onPress={() => setShowHistoryModal(true)}>
           <Text style={[styles.historyBtnTextOutline, { color: '#00C853', textAlign: 'center' }]}>ดูข้อมูลและเอกสารที่ใช้ยืนยันตัวตน</Text>
         </TouchableOpacity>
         <HistoryModal />
+
+        {/* 🟢 นำ ImageView มาแทนที่ ImageViewer */}
+        <ImageView
+          images={fullScreenImage ? [{ uri: fullScreenImage }] : []}
+          imageIndex={0}
+          visible={!!fullScreenImage}
+          onRequestClose={() => setFullScreenImage(null)}
+          swipeToCloseEnabled={true}
+        />
       </View>
     );
   }
 
-  // 🟢 2. สถานะรอตรวจ (Pending)
+  // สถานะรอตรวจ
   if (verificationStatus === 'pending') {
     return (
       <View style={[styles.pendingBox, { flexDirection: 'column', alignItems: 'flex-start' }]}>
@@ -217,18 +240,24 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
             <Text style={styles.pendingDesc}>เอกสารถูกส่งเข้าระบบแล้ว แอดมินจะตรวจสอบและแจ้งให้ทราบภายหลัง</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={[styles.historyBtnOutline, { borderColor: '#EF6C00', marginTop: 16, width: '100%', backgroundColor: '#FFF' }]}
-          onPress={() => setShowHistoryModal(true)}
-        >
+        <TouchableOpacity style={[styles.historyBtnOutline, { borderColor: '#EF6C00', marginTop: 16, width: '100%', backgroundColor: '#FFF' }]} onPress={() => setShowHistoryModal(true)}>
           <Text style={[styles.historyBtnTextOutline, { color: '#EF6C00', textAlign: 'center' }]}>ตรวจสอบข้อมูลที่ส่งไป</Text>
         </TouchableOpacity>
         <HistoryModal />
+
+        {/* 🟢 นำ ImageView มาแทนที่ ImageViewer */}
+        <ImageView
+          images={fullScreenImage ? [{ uri: fullScreenImage }] : []}
+          imageIndex={0}
+          visible={!!fullScreenImage}
+          onRequestClose={() => setFullScreenImage(null)}
+          swipeToCloseEnabled={true}
+        />
       </View>
     );
   }
 
-  // 🟢 3. สถานะไม่ผ่าน (Not Pass)
+  // สถานะไม่ผ่าน
   if (verificationStatus === 'notpass') {
     return (
       <View style={[styles.pendingBox, { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2', flexDirection: 'column', alignItems: 'flex-start' }]}>
@@ -239,7 +268,6 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
             <Text style={[styles.pendingDesc, { color: '#D32F2F' }]}>เอกสารของคุณไม่ชัดเจนหรือไม่ถูกต้อง กรุณาดูหมายเหตุแล้วส่งใหม่</Text>
           </View>
         </View>
-
         <View style={styles.actionRow}>
           <TouchableOpacity style={styles.reSubmitBtn} onPress={() => setVerificationStatus('unsubmitted')}>
             <Text style={styles.reSubmitText}>กรอกฟอร์มส่งใหม่</Text>
@@ -249,6 +277,15 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
           </TouchableOpacity>
         </View>
         <HistoryModal />
+
+        {/* 🟢 นำ ImageView มาแทนที่ ImageViewer */}
+        <ImageView
+          images={fullScreenImage ? [{ uri: fullScreenImage }] : []}
+          imageIndex={0}
+          visible={!!fullScreenImage}
+          onRequestClose={() => setFullScreenImage(null)}
+          swipeToCloseEnabled={true}
+        />
       </View>
     );
   }
@@ -261,11 +298,7 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
       <View style={styles.docSection}>
         <Text style={styles.inputLabel}>ระดับชั้นของสัตวแพทย์</Text>
         <View style={styles.pickerContainer}>
-          <Picker
-            selectedValue={vetClass}
-            onValueChange={(itemValue) => setVetClass(itemValue)}
-            style={styles.picker}
-          >
+          <Picker selectedValue={vetClass} onValueChange={(itemValue) => setVetClass(itemValue)} style={styles.picker}>
             <Picker.Item label="สัตวแพทย์ชั้น 1 (ปริญญาตรีขึ้นไป)" value="1" />
             <Picker.Item label="สัตวแพทย์ชั้น 2 (ประกาศนียบัตร)" value="2" />
           </Picker>
@@ -277,11 +310,8 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
         <Text style={styles.subLabel}>วันที่หมดอายุ</Text>
         <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowDatePicker({ visible: true, type: 'license' })}>
           <Feather name="calendar" size={16} color="#666" style={{ marginRight: 8 }} />
-          <Text style={licenseExpiryDate ? styles.dateTextSelected : styles.dateTextPlaceholder}>
-            {formatDate(licenseExpiryDate)}
-          </Text>
+          <Text style={licenseExpiryDate ? styles.dateTextSelected : styles.dateTextPlaceholder}>{formatDate(licenseExpiryDate)}</Text>
         </TouchableOpacity>
-
         <Text style={styles.subLabel}>ไฟล์เอกสาร</Text>
         <View style={styles.uploadRow}>
           <TextInput style={[styles.uploadInput, licenseFile && { color: '#00C853', fontWeight: 'bold' }]} placeholder="ยังไม่ได้เลือกไฟล์" value={licenseFile ? licenseFile.name : ''} editable={false} />
@@ -296,11 +326,8 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
         <Text style={styles.subLabel}>วันที่หมดอายุ</Text>
         <TouchableOpacity style={styles.datePickerBtn} onPress={() => setShowDatePicker({ visible: true, type: 'idCard' })}>
           <Feather name="calendar" size={16} color="#666" style={{ marginRight: 8 }} />
-          <Text style={idCardExpiryDate ? styles.dateTextSelected : styles.dateTextPlaceholder}>
-            {formatDate(idCardExpiryDate)}
-          </Text>
+          <Text style={idCardExpiryDate ? styles.dateTextSelected : styles.dateTextPlaceholder}>{formatDate(idCardExpiryDate)}</Text>
         </TouchableOpacity>
-
         <Text style={styles.subLabel}>ไฟล์เอกสาร</Text>
         <View style={styles.uploadRow}>
           <TextInput style={[styles.uploadInput, idCardFile && { color: '#00C853', fontWeight: 'bold' }]} placeholder="ยังไม่ได้เลือกไฟล์" value={idCardFile ? idCardFile.name : ''} editable={false} />
@@ -310,23 +337,14 @@ export default function Verify({ vetProfile, verificationStatus, setVerification
         </View>
       </View>
 
-      <TouchableOpacity
-        style={[styles.submitFormButton, { backgroundColor: isLoading ? '#999' : '#00C853' }]}
-        onPress={handleSubmitDocuments}
-        disabled={isLoading}
-      >
-        <Text style={styles.submitFormText}>
-          {isLoading ? "กำลังอัปโหลดเอกสาร..." : "ส่งเอกสารให้ตรวจสอบ"}
-        </Text>
+      <TouchableOpacity style={[styles.submitFormButton, { backgroundColor: isLoading ? '#999' : '#00C853' }]} onPress={handleSubmitDocuments} disabled={isLoading}>
+        <Text style={styles.submitFormText}>{isLoading ? "กำลังอัปโหลดเอกสาร..." : "ส่งเอกสารให้ตรวจสอบ"}</Text>
       </TouchableOpacity>
 
       {showDatePicker.visible && (
         <DateTimePicker
           value={showDatePicker.type === 'license' ? (licenseExpiryDate || new Date()) : showDatePicker.type === 'idCard' ? (idCardExpiryDate || new Date()) : new Date()}
-          mode="date"
-          display="default"
-          onChange={handleDateChange}
-          minimumDate={new Date()}
+          mode="date" display="default" onChange={handleDateChange} minimumDate={new Date()}
         />
       )}
       <View style={{ height: 20 }} />
@@ -383,6 +401,15 @@ const styles = StyleSheet.create({
   historyItem: { marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   historyLabel: { fontSize: 14, fontWeight: 'bold', color: '#1A1A1A', marginBottom: 4 },
   historySubText: { fontSize: 12, color: '#666', marginBottom: 10 },
-  viewDocBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#F0F8FF', borderRadius: 6, borderWidth: 1, borderColor: '#B3D4FF' },
-  viewDocText: { fontSize: 13, color: '#0055B3', fontWeight: 'bold' }
+
+  // Styles สำหรับรูปภาพ Preview
+  previewImage: { width: '100%', height: 160, borderRadius: 8, borderWidth: 1, borderColor: '#EAEAEC', backgroundColor: '#F0F0F0' },
+  previewOverlay: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
+  previewText: { color: '#FFF', fontSize: 12, marginLeft: 6, fontWeight: 'bold' },
+  noDocText: { fontSize: 13, color: '#999', fontStyle: 'italic', marginTop: 8 },
+
+  // Styles สำหรับหน้าจอ Full Screen 
+  viewerContainer: { flex: 1, backgroundColor: 'rgba(0,0,0,0.9)', justifyContent: 'center', alignItems: 'center' },
+  viewerCloseBtn: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
+  viewerImage: { width: '100%', height: '80%' }
 });
