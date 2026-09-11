@@ -28,9 +28,16 @@ exports.uploadVetLicense = async (req, res) => {
 
         const uploadToCloudinary = (fileBuffer, folder) => {
             return new Promise((resolve, reject) => {
-                const stream = cloudinary.uploader.upload_stream({ resource_type: "auto", folder: folder }, (error, result) => {
-                    if (error) reject(error); else resolve(result);
-                });
+                const stream = cloudinary.uploader.upload_stream(
+                    {
+                        resource_type: "image", // 🟢 1. บังคับให้มองเป็นรูปภาพ
+                        folder: folder,
+                        format: "jpg" // 🟢 2. แปลงไฟล์ทุกชนิด (รวมถึง PDF) ให้กลายเป็น JPG ทันที
+                    },
+                    (error, result) => {
+                        if (error) reject(error); else resolve(result);
+                    }
+                );
                 stream.end(fileBuffer);
             });
         };
