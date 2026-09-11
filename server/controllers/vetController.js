@@ -12,11 +12,15 @@ cloudinary.config({
 // ==========================================
 exports.uploadVetLicense = async (req, res) => {
     try {
-        const { vet_id } = req.body;
+        // เพิ่มรับค่าตัวแปรวันหมดอายุและ vet_class จาก Frontend
+        const { vet_id, vet_license_expired, vet_id_card_expired, vet_class } = req.body;
         const files = req.files;
 
         console.log("==== 📥 [API] ได้รับคำขอส่งเอกสาร ====");
         console.log("📝 vet_id ที่แอปส่งมาคือ:", vet_id);
+        console.log("📅 วันหมดอายุใบประกอบฯ:", vet_license_expired);
+        console.log("📅 วันหมดอายุบัตรประจำตัว:", vet_id_card_expired);
+        console.log("🎓 ระดับชั้นของสัตวแพทย์:", vet_class);
 
         if (!files || !files.vet_license_pdf || !files.vet_id_card_pdf) {
             return res.status(400).json({ message: "กรุณาอัปโหลดเอกสารให้ครบทั้ง 2 ไฟล์" });
@@ -39,15 +43,32 @@ exports.uploadVetLicense = async (req, res) => {
 
         console.log("✅ อัปโหลด Cloudinary สำเร็จ");
 
+        // 🟢 1. ทำการอัปเดตข้อมูล vet_class ลงในตาราง vet
+        if (vet_class) {
+            const { error: vetUpdateError } = await supabase
+                .from('vet')
+                .update({ vet_class: parseInt(vet_class) }) // แปลงเป็นตัวเลข (smallint)
+                .eq('vet_id', vet_id);
+
+            if (vetUpdateError) {
+                console.error("❌ Error Update ตาราง vet:", vetUpdateError);
+                throw vetUpdateError;
+            }
+            console.log("✅ อัปเดต vet_class ลงตาราง vet สำเร็จ");
+        }
+
+        // 🟢 2. บันทึกข้อมูลเอกสารลงตาราง vet_license (ใช้ upsert และใส่ฟิลด์วันหมดอายุลงไป)
         const { data: licenseData, error: licenseError } = await supabase
             .from('vet_license')
-            .insert({
+            .upsert({
                 vet_id: vet_id,
                 vet_license_pdf_url: licenseResult.secure_url,
                 vet_license_pdf_public_id: licenseResult.public_id,
+                vet_license_expired: vet_license_expired || null, // บันทึกวันหมดอายุ
                 vet_id_card_pdf_url: idCardResult.secure_url,
-                vet_id_card_pdf_public_id: idCardResult.public_id
-            })
+                vet_id_card_pdf_public_id: idCardResult.public_id,
+                vet_id_card_expired: vet_id_card_expired || null // บันทึกวันหมดอายุ
+            }, { onConflict: 'vet_id' })
             .select('*')
             .single();
 
@@ -58,6 +79,7 @@ exports.uploadVetLicense = async (req, res) => {
 
         console.log("✅ บันทึกลง vet_license สำเร็จ ได้ ID:", licenseData.vet_license_id);
 
+        // 🟢 3. บันทึกข้อมูลลงตาราง vet_license_document
         const { data: docData, error: documentError } = await supabase
             .from('vet_license_document')
             .insert({
@@ -85,51 +107,56 @@ exports.uploadVetLicense = async (req, res) => {
 // ==========================================
 exports.checkVetStatus = async (req, res) => {
     try {
-        // 🟢 รองรับทั้งชื่อ Parameter แบบ userId และ vetId เผื่อในไฟล์ routes เขียนไว้ไม่ตรงกัน
         const vetId = req.params.vetId || req.params.userId;
 
-        console.log("==== 🔍 [API] checkVetStatus ถูกเรียก! ====");
-        console.log("🎯 vetId ที่กำลังใช้ค้นหาคือ:", vetId);
-
         if (!vetId || vetId === 'undefined') {
-            console.log("❌ ไม่ได้รับค่า vetId เลยตอบกลับว่า unsubmitted");
             return res.status(200).json({ status: 'unsubmitted' });
         }
 
-        // 1. ไปเช็กก่อนว่าในตาราง vet_license มีการส่งเอกสารหรือยัง?
+        // 1. ดึงข้อมูลเอกสารทั้งหมด (URL, วันที่) จาก vet_license
         const { data: licenseData, error: licenseError } = await supabase
             .from('vet_license')
-            .select('vet_license_id')
+            .select('*')
             .eq('vet_id', vetId)
             .order('created_at', { ascending: false });
 
-        console.log("🗄️ ผลลัพธ์จากการค้นหาตาราง vet_license:", licenseData);
-        if (licenseError) console.error("❌ Error query vet_license:", licenseError);
-
         if (!licenseData || licenseData.length === 0) {
-            console.log("⚠️ ไม่พบเอกสารในตาราง vet_license (แสดงว่าหา vet_id ไม่เจอ)");
             return res.status(200).json({ status: 'unsubmitted' });
         }
 
-        const latestLicenseId = licenseData[0].vet_license_id;
-        console.log("✅ พบเอกสารล่าสุด vet_license_id:", latestLicenseId);
+        const latestLicense = licenseData[0]; // เอาใบเอกสารล่าสุด
 
-        // 2. ถ้ามีเอกสาร ให้เอา ID ไปเปิดดูสถานะในตาราง vet_license_document
+        // 2. 🟢 ดึงสถานะและหมายเหตุจาก vet_license_document (ดึงเฉพาะอันที่ใหม่ที่สุด)
         const { data: docData, error: docError } = await supabase
             .from('vet_license_document')
-            .select('status, detail') // 🟢 เพิ่มการดึงคอลัมน์ detail ตรงนี้
-            .eq('vet_license_id', latestLicenseId)
+            .select('status, detail')
+            .eq('vet_license_id', latestLicense.vet_license_id)
+            .order('created_at', { ascending: false }) // 👈 เรียงตามเวลาที่สร้างล่าสุด
+            .limit(1); // 👈 ดึงมาแค่อันเดียว ป้องกัน Error หาเจอหลายแถว
+
+        if (docError) {
+            console.error("❌ Error querying document:", docError);
+        }
+
+        // 3. ดึงระดับชั้นสัตวแพทย์จากตาราง vet
+        const { data: vetData } = await supabase
+            .from('vet')
+            .select('vet_class')
+            .eq('vet_id', vetId)
             .single();
 
-        console.log("🗄️ ผลลัพธ์จากการค้นหาตาราง vet_license_document:", docData);
-        if (docError) console.error("❌ Error query vet_license_document:", docError);
-
-        if (docData) {
-            console.log(`🎉 สรุปสถานะที่ส่งให้แอปคือ: ${docData.status}`);
-            // 🟢 ส่งค่า detail พ่วงกลับไปให้แอปด้วย
-            return res.status(200).json({ status: docData.status, detail: docData.detail });
+        // 🟢 เปลี่ยนวิธีเช็ก docData จาก Object เป็น Array
+        if (docData && docData.length > 0) {
+            const latestDoc = docData[0]; // เลือกข้อมูลแถวแรก (ที่ใหม่ที่สุด)
+            return res.status(200).json({
+                status: latestDoc.status,
+                detail: latestDoc.detail,
+                submittedDocs: {
+                    ...latestLicense,
+                    vet_class: vetData?.vet_class
+                }
+            });
         } else {
-            console.log("⚠️ หาเอกสารใน vet_license เจอ แต่หาใน vet_license_document ไม่เจอ!");
             return res.status(200).json({ status: 'unsubmitted' });
         }
 
@@ -165,13 +192,11 @@ exports.createClinicRequest = async (req, res) => {
         };
 
         console.log("1. กำลังอัปโหลดเอกสารคลินิกขึ้น Cloud...");
-        // 🟢 แยกโฟลเดอร์ให้เป็นระเบียบตามที่คุณต้องการ
         const ss3Result = await uploadToCloudinary(files.ss3_license_pdf[0].buffer, "clinic_documents/ss.3");
         const ss4Result = await uploadToCloudinary(files.ss4_license_pdf[0].buffer, "clinic_documents/ss.4");
 
         console.log("2. กำลังบันทึกข้อมูลลงฐานข้อมูล 3 ตาราง...");
 
-        // 🟢 1. บันทึกลงตาราง clinic_license (ใช้ UPSERT แก้ปัญหา Duplicate Key)
         const { data: clinicLicenseData, error: clinicLicenseError } = await supabase
             .from('clinic_license')
             .upsert({
@@ -180,7 +205,7 @@ exports.createClinicRequest = async (req, res) => {
                 ss3_license_public_id: ss3Result.public_id,
                 ss4_license_url: ss4Result.secure_url,
                 ss4_license_public_id: ss4Result.public_id
-            }, { onConflict: 'vet_id' }) // 👈 สั่งว่าถ้า vet_id ซ้ำ ให้เซฟทับไฟล์เดิมได้เลย
+            }, { onConflict: 'vet_id' })
             .select('clinic_license_id')
             .single();
 
@@ -189,7 +214,6 @@ exports.createClinicRequest = async (req, res) => {
             throw clinicLicenseError;
         }
 
-        // 🟢 2. บันทึกลงตาราง vetclinic_address (อันนี้สร้างที่อยู่ใหม่ไปเลย)
         const { data: addressData, error: addressError } = await supabase
             .from('vetclinic_address')
             .insert({
@@ -210,13 +234,12 @@ exports.createClinicRequest = async (req, res) => {
             throw addressError;
         }
 
-        // 🟢 3. นำ ID ทั้งสองตาราง มาประกอบร่างลงตาราง vet_clinic_document 
         const { error: documentError } = await supabase
             .from('vet_clinic_document')
             .insert({
                 clinic_license_id: clinicLicenseData.clinic_license_id,
                 vetclinic_address_id: addressData.vetclinic_address_id,
-                status: 'pending' // 👈 สร้างคำขอใหม่ เป็นสถานะรอตรวจสอบอีกครั้ง
+                status: 'pending'
             });
 
         if (documentError) {
@@ -232,6 +255,7 @@ exports.createClinicRequest = async (req, res) => {
         return res.status(500).json({ message: "เกิดข้อผิดพลาดในการสร้างสถานพยาบาล" });
     }
 };
+
 // ==========================================
 // 4. ฟังก์ชันเช็กสถานะคำขอสร้างสถานพยาบาล
 // ==========================================
@@ -239,7 +263,6 @@ exports.checkClinicStatus = async (req, res) => {
     try {
         const vetId = req.params.vetId;
 
-        // 1. หาว่าหมอคนนี้เคยส่งคำขอคลินิกไว้ไหม (เอาอันล่าสุด)
         const { data: licenseData, error: licenseError } = await supabase
             .from('clinic_license')
             .select('clinic_license_id')
@@ -253,7 +276,6 @@ exports.checkClinicStatus = async (req, res) => {
 
         const latestLicenseId = licenseData[0].clinic_license_id;
 
-        // 2. ดึง status และ detail จากเอกสาร
         const { data: docData, error: docError } = await supabase
             .from('vet_clinic_document')
             .select('status, detail')

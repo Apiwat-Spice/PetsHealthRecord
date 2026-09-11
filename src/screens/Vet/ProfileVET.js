@@ -25,8 +25,13 @@ export default function ProfileVET({ setIsLoggedIn }) {
   // ตั้งค่าเริ่มต้นเป็น unsubmitted (ยังไม่ได้ส่ง) เสมอ เพื่อให้ฟอร์มอัปโหลดโชว์ขึ้นมาเป็นค่าเริ่มต้น
   const [verificationStatus, setVerificationStatus] = useState('unsubmitted');
   const [verificationDetail, setVerificationDetail] = useState(''); // สำหรับเก็บรายละเอียดเพิ่มเติมเมื่อสถานะเป็น notpass
+
+  // 🟢 เพิ่ม State สำหรับเก็บข้อมูลเอกสารที่เคยส่งไปแล้ว
+  const [submittedDocs, setSubmittedDocs] = useState(null);
+
   const [clinicStatus, setClinicStatus] = useState('unsubmitted');
   const [clinicDetail, setClinicDetail] = useState('');
+
   useEffect(() => {
     const loadProfile = async () => {
       try {
@@ -46,7 +51,7 @@ export default function ProfileVET({ setIsLoggedIn }) {
             name: `${profile.firstname} ${profile.lastname}`,
             email: user.email || 'ไม่ระบุ',
             phone: profile.phone || 'ไม่ระบุ',
-            roleLevel: profile.vet_class ? `สัตวแพทย์ขั้น ${profile.vet_class}` : 'สัตวแพทย์',
+            roleLevel: profile.vet_class ? `สัตวแพทย์ชั้น ${profile.vet_class}` : 'สัตวแพทย์',
           });
 
           // ยิง API ไปถาม Database ว่าสถานะปัจจุบันคืออะไร
@@ -60,17 +65,25 @@ export default function ProfileVET({ setIsLoggedIn }) {
             if (response.ok && data.status) {
               setVerificationStatus(data.status); // (pass, pending, notpass, unsubmitted)
               setVerificationDetail(data.detail || '');
+
+              // 🟢 อัปเดตข้อมูลเอกสารลง State เพื่อส่งไปให้หน้า Verify
+              setSubmittedDocs(data.submittedDocs || null);
+
             } else {
               setVerificationStatus('unsubmitted');
+              setSubmittedDocs(null);
             }
           } catch (fetchError) {
             console.error("Fetch status error:", fetchError);
             setVerificationStatus('unsubmitted');
+            setSubmittedDocs(null);
           }
+
+          // เช็กสถานะคลินิก
           try {
             const clinicRes = await fetch(`${API_URL}/check-clinic-status/${profile.vet_id}`);
             const clinicData = await clinicRes.json();
-            
+
             if (clinicRes.ok && clinicData.status) {
               setClinicStatus(clinicData.status);
               setClinicDetail(clinicData.detail || '');
@@ -180,12 +193,12 @@ export default function ProfileVET({ setIsLoggedIn }) {
           )}
 
           {activeTab === 'clinic' && (
-            <Clinic 
-              vetProfile={vetProfile} 
-              verificationStatus={verificationStatus} 
-              clinicStatus={clinicStatus} 
-              setClinicStatus={setClinicStatus} 
-              clinicDetail={clinicDetail} 
+            <Clinic
+              vetProfile={vetProfile}
+              verificationStatus={verificationStatus}
+              clinicStatus={clinicStatus}
+              setClinicStatus={setClinicStatus}
+              clinicDetail={clinicDetail}
             />
           )}
 
@@ -194,7 +207,8 @@ export default function ProfileVET({ setIsLoggedIn }) {
               vetProfile={vetProfile}
               verificationStatus={verificationStatus}
               setVerificationStatus={setVerificationStatus}
-              verificationDetail={verificationDetail} // 🟢 ส่งตัวแปรเข้าไปใน Component
+              verificationDetail={verificationDetail}
+              submittedDocs={submittedDocs} // 🟢 แนบ Props ข้อมูลเอกสารลงไปที่หน้า Verify
             />
           )}
         </View>

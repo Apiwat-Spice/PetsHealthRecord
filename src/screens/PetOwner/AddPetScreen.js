@@ -6,6 +6,7 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { API_URL } from '../../config';
 import * as ImagePicker from 'expo-image-picker';
 import * as SecureStore from 'expo-secure-store';
+import QRCode from 'react-native-qrcode-svg';
 
 export default function AddPetScreen({ navigation }) {
     const [date, setDate] = useState(new Date());
@@ -14,6 +15,7 @@ export default function AddPetScreen({ navigation }) {
     const [imageBase64, setImageBase64] = useState(null);
     const [isLoading, setIsLoading] = useState(false);
     const [currentOwnerId, setCurrentOwnerId] = useState(null);
+    const [petQR, setPetQR] = useState(null)
 
     useEffect(() => {
         const loadUserData = async () => {
@@ -79,7 +81,7 @@ export default function AddPetScreen({ navigation }) {
                 },
                 body: JSON.stringify({
                     file: dataUrl,
-                    upload_preset: 'pet_app_preset' ,// ชื่อ Preset ของคุณ
+                    upload_preset: 'pet_app_preset',// ชื่อ Preset ของคุณ
                     folder: 'Pet' // ชื่อ Folder ของคุณ
                 }),
             });
@@ -154,20 +156,20 @@ export default function AddPetScreen({ navigation }) {
 
             // 🟢 เพิ่มตัวแปรสำหรับเก็บ Public ID
             let finalImageUrl = null;
-            let finalImagePublicId = null; 
+            let finalImagePublicId = null;
 
             if (imageBase64) {
-                const uploadResult = await uploadImageToCloudinary(imageBase64); 
-                
+                const uploadResult = await uploadImageToCloudinary(imageBase64);
+
                 if (!uploadResult) {
                     Alert.alert('ข้อผิดพลาด', 'อัปโหลดรูปไม่สำเร็จ กรุณาลองใหม่');
                     setIsLoading(false);
-                    return; 
+                    return;
                 }
 
                 // 🟢 แยกข้อมูล URL และ Public ID ออกมาจากที่ return ไว้
                 finalImageUrl = uploadResult.url;
-                finalImagePublicId = uploadResult.publicId; 
+                finalImagePublicId = uploadResult.publicId;
             }
 
             // 🟢 นำข้อมูลใส่ Payload เพื่อเตรียมยิง API 
@@ -180,8 +182,8 @@ export default function AddPetScreen({ navigation }) {
                 birth_date: dbFormattedDate,
                 weight: petData.weight || null,
                 detail: petData.detail,
-                pet_image_url: finalImageUrl, 
-                pet_image_public_id: finalImagePublicId 
+                pet_image_url: finalImageUrl,
+                pet_image_public_id: finalImagePublicId
             };
 
             const response = await fetch(`${API_URL}/pets/add`, {
@@ -200,13 +202,14 @@ export default function AddPetScreen({ navigation }) {
                 throw new Error(`เซิร์ฟเวอร์ไม่ได้ส่งข้อมูล JSON กลับมา (Status: ${response.status})`);
             }
 
-            if (!response.ok) {
-                throw new Error(result.message || "เกิดข้อผิดพลาดในการบันทึกข้อมูล");
-            }
+            const generatedQR = result.pet?.qr_code || result.data?.[0]?.qr_code || result.data?.qr_code;
 
-            Alert.alert('สำเร็จ', 'เพิ่มข้อมูลสัตว์เลี้ยงเรียบร้อยแล้ว!', [
-                { text: 'ตกลง', onPress: () => navigation?.goBack() }
-            ]);
+            if (generatedQR) {
+                setPetQR(generatedQR); // เซ็ตค่า State เพื่อให้หน้าจอเปลี่ยนไปแสดง QR Code
+            } else {
+                // เผื่อกรณี Backend ไม่ได้ส่ง QR กลับมา ให้กลับหน้าหลักปกติ
+                Alert.alert('สำเร็จ', 'เพิ่มข้อมูลเรียบร้อย', [{ text: 'ตกลง', onPress: () => navigation?.goBack() }]);
+            }
 
         } catch (error) {
             console.error("Save Pet Error:", error);
@@ -230,114 +233,143 @@ export default function AddPetScreen({ navigation }) {
 
             <View style={styles.bodyWrapper}>
                 <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                    <View style={styles.contentPadding}>
 
-                        <View style={styles.uploadPhotoSection}>
-                            <TouchableOpacity style={styles.photoCircle} activeOpacity={0.8} onPress={pickImage}>
-                                {imageUri ? (
-                                    <Image source={{ uri: imageUri }} style={styles.previewImage} />
-                                ) : (
-                                    <MaterialCommunityIcons name="camera-plus" size={32} color="#0055B3" />
-                                )}
-                            </TouchableOpacity>
-                            <Text style={styles.uploadPhotoText}>
-                                {imageUri ? "เปลี่ยนรูปภาพ" : "เพิ่มรูปภาพสัตว์เลี้ยง"}
+                    {/* 🟢 ถ้า petQR มีค่า ให้โชว์หน้า QR Code */}
+                    {petQR ? (
+                        <View style={styles.qrSuccessContainer}>
+                            <Feather name="check-circle" size={60} color="#00B862" style={{ marginBottom: 16 }} />
+                            <Text style={styles.successTitle}>ลงทะเบียนสำเร็จ!</Text>
+                            <Text style={styles.successSubtitle}>สร้างประวัติของ {petData.name} เรียบร้อยแล้ว</Text>
+
+                            <View style={styles.qrBox}>
+                                <QRCode
+                                    // เปลี่ยนเป็นโดเมนของคุณในอนาคต (หรือใช้ API_URL ก็ได้ถ้าเป็นเว็บ)
+                                    value={`https://pawtag-app.com/pet/${petQR}`}
+                                    size={200}
+                                    color="black"
+                                    backgroundColor="white"
+                                />
+                            </View>
+
+                            <Text style={styles.qrInstruction}>
+                                สแกน QR Code เพื่อดูประวัติข้อมูลของสัตว์เลี้ยงตัวนี้ หรือแคปเจอร์หน้าจอเก็บไว้
                             </Text>
+
+                            <TouchableOpacity style={[styles.submitBtn, { width: '100%' }]} onPress={() => navigation?.goBack()}>
+                                <Text style={styles.submitBtnText}>กลับไปหน้าหลัก</Text>
+                            </TouchableOpacity>
                         </View>
+                    ) : (
 
-                        <View style={styles.formContainer}>
+                        /* 🟢 ถ้า petQR ยังไม่มีค่า ให้โชว์ฟอร์มกรอกข้อมูลตามปกติ */
+                        <View style={styles.contentPadding}>
 
-                            <Text style={styles.inputLabel}>ชื่อสัตว์เลี้ยง <Text style={styles.textRequired}>*</Text></Text>
-                            <TextInput
-                                style={styles.textInputOutline}
-                                placeholder="เช่น หมูเด้ง, ลัคกี้"
-                                value={petData.name}
-                                onChangeText={(text) => handleChange('name', text)}
-                            />
-
-                            <View style={styles.rowForm}>
-                                <View style={{ flex: 1, marginRight: 8 }}>
-                                    <Text style={styles.inputLabel}>ชนิดสัตว์เลี้ยง <Text style={styles.textRequired}>*</Text></Text>
-                                    <TextInput
-                                        style={styles.textInputOutline}
-                                        placeholder="เช่น สุนัข, แมว..."
-                                        value={petData.animaltype}
-                                        onChangeText={(text) => handleChange('animaltype', text)}
-                                    />
-                                </View>
-                                <View style={{ flex: 1, marginLeft: 8 }}>
-                                    <Text style={styles.inputLabel}>สายพันธุ์</Text>
-                                    <TextInput
-                                        style={styles.textInputOutline}
-                                        placeholder="เช่น ปอมเมอเรเนียน..."
-                                        value={petData.species}
-                                        onChangeText={(text) => handleChange('species', text)}
-                                    />
-                                </View>
+                            <View style={styles.uploadPhotoSection}>
+                                <TouchableOpacity style={styles.photoCircle} activeOpacity={0.8} onPress={pickImage}>
+                                    {imageUri ? (
+                                        <Image source={{ uri: imageUri }} style={styles.previewImage} />
+                                    ) : (
+                                        <MaterialCommunityIcons name="camera-plus" size={32} color="#0055B3" />
+                                    )}
+                                </TouchableOpacity>
+                                <Text style={styles.uploadPhotoText}>
+                                    {imageUri ? "เปลี่ยนรูปภาพ" : "เพิ่มรูปภาพสัตว์เลี้ยง"}
+                                </Text>
                             </View>
 
-                            <Text style={styles.inputLabel}>เพศ <Text style={styles.textRequired}>*</Text></Text>
-                            <View style={styles.sexRow}>
-                                <TouchableOpacity
-                                    style={[styles.sexBtn, petData.sex === 'male' && styles.sexBtnActiveBlue]}
-                                    onPress={() => handleChange('sex', 'male')}
-                                >
-                                    <MaterialCommunityIcons name="gender-male" size={20} color={petData.sex === 'male' ? '#FFF' : '#1976D2'} />
-                                    <Text style={[styles.sexText, petData.sex === 'male' && { color: '#FFF' }]}>ตัวผู้</Text>
-                                </TouchableOpacity>
+                            <View style={styles.formContainer}>
+                                <Text style={styles.inputLabel}>ชื่อสัตว์เลี้ยง <Text style={styles.textRequired}>*</Text></Text>
+                                <TextInput
+                                    style={styles.textInputOutline}
+                                    placeholder="เช่น หมูเด้ง, ลัคกี้"
+                                    value={petData.name}
+                                    onChangeText={(text) => handleChange('name', text)}
+                                />
 
-                                <TouchableOpacity
-                                    style={[styles.sexBtn, petData.sex === 'female' && styles.sexBtnActivePink]}
-                                    onPress={() => handleChange('sex', 'female')}
-                                >
-                                    <MaterialCommunityIcons name="gender-female" size={20} color={petData.sex === 'female' ? '#FFF' : '#E91E63'} />
-                                    <Text style={[styles.sexText, petData.sex === 'female' && { color: '#FFF' }]}>ตัวเมีย</Text>
-                                </TouchableOpacity>
-                            </View>
+                                <View style={styles.rowForm}>
+                                    <View style={{ flex: 1, marginRight: 8 }}>
+                                        <Text style={styles.inputLabel}>ชนิดสัตว์เลี้ยง <Text style={styles.textRequired}>*</Text></Text>
+                                        <TextInput
+                                            style={styles.textInputOutline}
+                                            placeholder="เช่น สุนัข, แมว..."
+                                            value={petData.animaltype}
+                                            onChangeText={(text) => handleChange('animaltype', text)}
+                                        />
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 8 }}>
+                                        <Text style={styles.inputLabel}>สายพันธุ์</Text>
+                                        <TextInput
+                                            style={styles.textInputOutline}
+                                            placeholder="เช่น ปอมเมอเรเนียน..."
+                                            value={petData.species}
+                                            onChangeText={(text) => handleChange('species', text)}
+                                        />
+                                    </View>
+                                </View>
 
-                            <View style={styles.rowForm}>
-                                <View style={{ flex: 1, marginRight: 8 }}>
-                                    <Text style={styles.inputLabel}>วันเกิด</Text>
+                                <Text style={styles.inputLabel}>เพศ <Text style={styles.textRequired}>*</Text></Text>
+                                <View style={styles.sexRow}>
                                     <TouchableOpacity
-                                        style={styles.datePickerInput}
-                                        onPress={() => setShowDatePicker(true)}
+                                        style={[styles.sexBtn, petData.sex === 'male' && styles.sexBtnActiveBlue]}
+                                        onPress={() => handleChange('sex', 'male')}
                                     >
-                                        <Text style={{ color: petData.birth_date ? '#1A1A1A' : '#A0A0A0', fontSize: 14 }}>
-                                            {petData.birth_date || "วว/ดด/ปปปป"}
-                                        </Text>
-                                        <Feather name="calendar" size={18} color="#0055B3" />
+                                        <MaterialCommunityIcons name="gender-male" size={20} color={petData.sex === 'male' ? '#FFF' : '#1976D2'} />
+                                        <Text style={[styles.sexText, petData.sex === 'male' && { color: '#FFF' }]}>ตัวผู้</Text>
+                                    </TouchableOpacity>
+
+                                    <TouchableOpacity
+                                        style={[styles.sexBtn, petData.sex === 'female' && styles.sexBtnActivePink]}
+                                        onPress={() => handleChange('sex', 'female')}
+                                    >
+                                        <MaterialCommunityIcons name="gender-female" size={20} color={petData.sex === 'female' ? '#FFF' : '#E91E63'} />
+                                        <Text style={[styles.sexText, petData.sex === 'female' && { color: '#FFF' }]}>ตัวเมีย</Text>
                                     </TouchableOpacity>
                                 </View>
-                                <View style={{ flex: 1, marginLeft: 8 }}>
-                                    <Text style={styles.inputLabel}>น้ำหนัก (กก.)</Text>
-                                    <TextInput
-                                        style={styles.textInputOutline}
-                                        placeholder="0.0"
-                                        keyboardType="numeric"
-                                        value={petData.weight}
-                                        onChangeText={(text) => handleChange('weight', text)}
-                                    />
+
+                                <View style={styles.rowForm}>
+                                    <View style={{ flex: 1, marginRight: 8 }}>
+                                        <Text style={styles.inputLabel}>วันเกิด</Text>
+                                        <TouchableOpacity
+                                            style={styles.datePickerInput}
+                                            onPress={() => setShowDatePicker(true)}
+                                        >
+                                            <Text style={{ color: petData.birth_date ? '#1A1A1A' : '#A0A0A0', fontSize: 14 }}>
+                                                {petData.birth_date || "วว/ดด/ปปปป"}
+                                            </Text>
+                                            <Feather name="calendar" size={18} color="#0055B3" />
+                                        </TouchableOpacity>
+                                    </View>
+                                    <View style={{ flex: 1, marginLeft: 8 }}>
+                                        <Text style={styles.inputLabel}>น้ำหนัก (กก.)</Text>
+                                        <TextInput
+                                            style={styles.textInputOutline}
+                                            placeholder="0.0"
+                                            keyboardType="numeric"
+                                            value={petData.weight}
+                                            onChangeText={(text) => handleChange('weight', text)}
+                                        />
+                                    </View>
                                 </View>
+
+                                <Text style={styles.inputLabel}>ข้อควรระวังทางการแพทย์ / แพ้ยา</Text>
+                                <TextInput
+                                    style={[styles.textInputOutline, styles.textArea]}
+                                    placeholder="เช่น แพ้ยา, ดุเวลาเจอคนแปลกหน้า..."
+                                    multiline={true}
+                                    numberOfLines={3}
+                                    value={petData.detail}
+                                    onChangeText={(text) => handleChange('detail', text)}
+                                />
                             </View>
 
-                            <Text style={styles.inputLabel}>ข้อควรระวังทางการแพทย์ / แพ้ยา</Text>
-                            <TextInput
-                                style={[styles.textInputOutline, styles.textArea]}
-                                placeholder="เช่น แพ้ยา, ดุเวลาเจอคนแปลกหน้า..."
-                                multiline={true}
-                                numberOfLines={3}
-                                value={petData.detail}
-                                onChangeText={(text) => handleChange('detail', text)}
-                            />
+                            {/* ปิดการใช้งานปุ่มถ้าระบบกำลังโหลด */}
+                            <TouchableOpacity style={styles.submitBtn} onPress={handleSavePet} disabled={isLoading}>
+                                <Text style={styles.submitBtnText}>{isLoading ? "กำลังบันทึกข้อมูล..." : "บันทึกข้อมูลสัตว์เลี้ยง"}</Text>
+                            </TouchableOpacity>
 
+                            <View style={{ height: 40 }} />
                         </View>
-
-                        <TouchableOpacity style={styles.submitBtn} onPress={handleSavePet}>
-                            <Text style={styles.submitBtnText}>บันทึกข้อมูลสัตว์เลี้ยง</Text>
-                        </TouchableOpacity>
-
-                        <View style={{ height: 40 }} />
-                    </View>
+                    )}
                 </ScrollView>
             </View>
             {showDatePicker && (
@@ -388,4 +420,11 @@ const styles = StyleSheet.create({
 
     submitBtn: { backgroundColor: '#0055B3', borderRadius: 12, paddingVertical: 14, alignItems: 'center', shadowColor: '#0055B3', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
     submitBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: 'bold' },
+
+    // 🟢 สไตล์เพิ่มเติมสำหรับหน้าแสดง QR Code
+    qrSuccessContainer: { padding: 30, alignItems: 'center', justifyContent: 'center', marginTop: 30 },
+    successTitle: { fontSize: 24, fontWeight: 'bold', color: '#00B862', marginBottom: 8 },
+    successSubtitle: { fontSize: 16, color: '#666', marginBottom: 30, textAlign: 'center' },
+    qrBox: { padding: 16, backgroundColor: '#FFF', borderRadius: 16, borderWidth: 1, borderColor: '#EAEAEC', elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 4 }, marginBottom: 30 },
+    qrInstruction: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 30, paddingHorizontal: 10, lineHeight: 22 },
 });

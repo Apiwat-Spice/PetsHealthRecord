@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, StatusBar,Alert} from 'react-native';
+import React, { useState, useRef } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, StatusBar, Alert, Modal } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { SafeAreaView } from "react-native-safe-area-context";
 import { API_URL } from '../../config';
-
+import QRCode from 'react-native-qrcode-svg';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 export default function PetDetail({ route, navigation }) {
     // 🟢 รับข้อมูลสัตว์เลี้ยงที่ส่งมาจากหน้า Pets.js
@@ -12,7 +14,43 @@ export default function PetDetail({ route, navigation }) {
     console.log("🐶 ข้อมูลสัตว์เลี้ยง:", pet);
     // 🟢 State สำหรับจัดการ Tab (info = ข้อมูลทั่วไป, health = ประวัติสุขภาพ, qr = QR Code)
     const [activeTab, setActiveTab] = useState('info');
+    const qrRef = useRef();
+    const handleDownloadQR = async () => {
+        if (qrRef.current) {
+            qrRef.current.toDataURL(async (base64Data) => {
+                try {
+                    // 1. จัดการชื่อไฟล์: แทนที่ช่องว่างด้วย _ (Underscore) ป้องกันระบบ Share ของ Android เออเร่อ
+                    const safePetName = (pet?.pet_name || 'Pet').replace(/\s+/g, '_');
 
+                    // 2. 🟢 ใช้ cacheDirectory แทน documentDirectory (เหมาะกับการแชร์ไฟล์ชั่วคราวมากที่สุด)
+                    const fileUri = FileSystem.cacheDirectory + `QR_${safePetName}.png`;
+
+                    // 3. สร้างไฟล์รูปภาพ
+                    await FileSystem.writeAsStringAsync(fileUri, base64Data, {
+                        encoding: FileSystem.EncodingType.Base64,
+                    });
+
+                    // 4. เช็กระบบการแชร์
+                    const isAvailable = await Sharing.isAvailableAsync();
+                    if (!isAvailable) {
+                        Alert.alert('แจ้งเตือน', 'อุปกรณ์นี้ไม่รองรับฟังก์ชันการแชร์ไฟล์');
+                        return;
+                    }
+
+                    // 5. เรียกหน้าต่างแชร์
+                    await Sharing.shareAsync(fileUri, {
+                        mimeType: 'image/png',
+                        dialogTitle: `แชร์หรือบันทึก QR Code ของ ${pet?.pet_name}`,
+                        UTI: 'public.png'
+                    });
+
+                } catch (error) {
+                    console.error("Share QR Error:", error);
+                    Alert.alert('ข้อผิดพลาด', 'ไม่สามารถแชร์หรือบันทึกรูปภาพได้');
+                }
+            });
+        }
+    };
     // ฟังก์ชันคำนวณอายุคร่าวๆ (ถ้ามีวันเกิด)
     const calculateAge = (birthDateString) => {
         if (!birthDateString) return '-';
@@ -29,7 +67,7 @@ export default function PetDetail({ route, navigation }) {
                 { text: 'ยกเลิก', style: 'cancel' },
                 {
                     text: 'ลบข้อมูล',
-                    style: 'destructive', 
+                    style: 'destructive',
                     onPress: async () => {
                         try {
                             // ยิง API ไปบอก Backend ให้ลบข้อมูล
@@ -39,7 +77,7 @@ export default function PetDetail({ route, navigation }) {
 
                             // 🟢 1. ดักจับข้อความแบบดิบๆ ก่อนเผื่อ Backend ส่ง HTML (404) กลับมา
                             const responseText = await response.text();
-                            
+
                             let result;
                             try {
                                 result = JSON.parse(responseText);
@@ -52,7 +90,7 @@ export default function PetDetail({ route, navigation }) {
                             if (response.ok) {
                                 console.log("Delete pet:", pet?.pet_id);
                                 Alert.alert('สำเร็จ', 'ลบข้อมูลสัตว์เลี้ยงเรียบร้อยแล้ว', [
-                                    { text: 'ตกลง', onPress: () => navigation.goBack() } 
+                                    { text: 'ตกลง', onPress: () => navigation.goBack() }
                                 ]);
                             } else {
                                 Alert.alert('เกิดข้อผิดพลาด', result.message || 'ไม่สามารถลบข้อมูลได้');
@@ -68,122 +106,163 @@ export default function PetDetail({ route, navigation }) {
     };
 
 
-return (
-    <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="light-content" backgroundColor="#2A4B6A" />
+    return (
+        <SafeAreaView style={styles.container}>
+            <StatusBar barStyle="light-content" backgroundColor="#2A4B6A" />
 
-        {/* 🟢 Header สีน้ำเงินเข้ม */}
-        <View style={styles.header}>
-            <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                <Feather name="arrow-left" size={24} color="#FFF" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>{pet?.pet_name || 'ชื่อสัตว์เลี้ยง'}</Text>
-            <View style={{ width: 24 }} />
-            {/* ไว้ถ่วงน้ำหนักให้ Title อยู่ตรงกลาง */}
-        </View>
-
-        <View style={styles.bodyContainer}>
-
-            {/* 🟢 ส่วนของ Tab Menu */}
-            <View style={styles.tabContainer}>
-                <TouchableOpacity
-                    style={[styles.tabButton, activeTab === 'info' && styles.tabActive]}
-                    onPress={() => setActiveTab('info')}
-                >
-                    <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]}>ข้อมูลทั่วไป</Text>
+            {/* 🟢 Header สีน้ำเงินเข้ม */}
+            <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+                    <Feather name="arrow-left" size={24} color="#FFF" />
                 </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.tabButton, activeTab === 'health' && styles.tabActive]}
-                    onPress={() => setActiveTab('health')}
-                >
-                    <Text style={[styles.tabText, activeTab === 'health' && styles.tabTextActive]}>ประวัติสุขภาพ</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                    style={[styles.tabButton, activeTab === 'qr' && styles.tabActive]}
-                    onPress={() => setActiveTab('qr')}
-                >
-                    <Text style={[styles.tabText, activeTab === 'qr' && styles.tabTextActive]}>QR Code</Text>
-                </TouchableOpacity>
+                <Text style={styles.headerTitle}>{pet?.pet_name || 'ชื่อสัตว์เลี้ยง'}</Text>
+                <View style={{ width: 24 }} />
+                {/* ไว้ถ่วงน้ำหนักให้ Title อยู่ตรงกลาง */}
             </View>
 
-            {/* 🟢 เนื้อหาของ Tab: ข้อมูลทั่วไป */}
-            {activeTab === 'info' && (
-                <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentScroll}>
+            <View style={styles.bodyContainer}>
 
-                    {/* การ์ดข้อมูลพื้นฐาน */}
-                    <View style={styles.card}>
-                        <Text style={styles.sectionTitle}>ข้อมูลพื้นฐาน</Text>
-                        <View style={styles.divider} />
+                {/* 🟢 ส่วนของ Tab Menu */}
+                <View style={styles.tabContainer}>
+                    <TouchableOpacity
+                        style={[styles.tabButton, activeTab === 'info' && styles.tabActive]}
+                        onPress={() => setActiveTab('info')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]}>ข้อมูลทั่วไป</Text>
+                    </TouchableOpacity>
 
-                        <View style={styles.profileSection}>
-                            {pet?.pet_image_url ? (
-                                <Image source={{ uri: pet.pet_image_url }} style={styles.profileImage} />
-                            ) : (
-                                <View style={[styles.profileImage, { backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' }]}>
-                                    <Text style={{ fontSize: 40 }}>🐶</Text>
+                    <TouchableOpacity
+                        style={[styles.tabButton, activeTab === 'health' && styles.tabActive]}
+                        onPress={() => setActiveTab('health')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'health' && styles.tabTextActive]}>ประวัติสุขภาพ</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.tabButton, activeTab === 'qr' && styles.tabActive]}
+                        onPress={() => setActiveTab('qr')}
+                    >
+                        <Text style={[styles.tabText, activeTab === 'qr' && styles.tabTextActive]}>QR Code</Text>
+                    </TouchableOpacity>
+                </View>
+
+                {/* 🟢 เนื้อหาของ Tab: ข้อมูลทั่วไป */}
+                {activeTab === 'info' && (
+                    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.contentScroll}>
+
+                        {/* การ์ดข้อมูลพื้นฐาน */}
+                        <View style={styles.card}>
+                            <Text style={styles.sectionTitle}>ข้อมูลพื้นฐาน</Text>
+                            <View style={styles.divider} />
+
+                            <View style={styles.profileSection}>
+                                {pet?.pet_image_url ? (
+                                    <Image source={{ uri: pet.pet_image_url }} style={styles.profileImage} />
+                                ) : (
+                                    <View style={[styles.profileImage, { backgroundColor: '#E0E0E0', justifyContent: 'center', alignItems: 'center' }]}>
+                                        <Text style={{ fontSize: 40 }}>🐶</Text>
+                                    </View>
+                                )}
+                            </View>
+
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>สายพันธุ์ (ชนิด)</Text>
+                                <Text style={styles.infoValue}>{pet?.animal_type || '-'}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>พันธุ์</Text>
+                                <Text style={styles.infoValue}>{pet?.species || '-'}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>อายุ</Text>
+                                <Text style={styles.infoValue}>{calculateAge(pet?.birth_date)}</Text>
+                            </View>
+                            <View style={styles.infoRow}>
+                                <Text style={styles.infoLabel}>น้ำหนัก</Text>
+                                <Text style={styles.infoValue}>{pet?.weight ? `${pet.weight} กก.` : '-'}</Text>
+                            </View>
+
+                            {/* ข้อควรระวังทางการแพทย์ */}
+                            {pet?.detail && (
+                                <View style={{ marginTop: 15 }}>
+                                    <Text style={styles.warningTitle}>ข้อควรระวังทางการแพทย์</Text>
+                                    <View style={styles.warningBox}>
+                                        <Text style={styles.warningText}>{pet.detail}</Text>
+                                    </View>
                                 </View>
                             )}
                         </View>
 
-                        <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>สายพันธุ์ (ชนิด)</Text>
-                            <Text style={styles.infoValue}>{pet?.animal_type || '-'}</Text>
-                        </View>
-                        <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>พันธุ์</Text>
-                            <Text style={styles.infoValue}>{pet?.species || '-'}</Text>
-                        </View>
-                        <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>อายุ</Text>
-                            <Text style={styles.infoValue}>{calculateAge(pet?.birth_date)}</Text>
-                        </View>
-                        <View style={styles.infoRow}>
-                            <Text style={styles.infoLabel}>น้ำหนัก</Text>
-                            <Text style={styles.infoValue}>{pet?.weight ? `${pet.weight} กก.` : '-'}</Text>
-                        </View>
+                        <TouchableOpacity
+                            style={styles.deleteButton}
+                            onPress={handleDeletePet}
+                        >
+                            <Feather name="trash-2" size={20} color="#D32F2F" />
+                            <Text style={styles.deleteButtonText}>ลบสัตว์เลี้ยง</Text>
+                        </TouchableOpacity>
 
-                        {/* ข้อควรระวังทางการแพทย์ */}
-                        {pet?.detail && (
-                            <View style={{ marginTop: 15 }}>
-                                <Text style={styles.warningTitle}>ข้อควรระวังทางการแพทย์</Text>
-                                <View style={styles.warningBox}>
-                                    <Text style={styles.warningText}>{pet.detail}</Text>
-                                </View>
-                            </View>
-                        )}
+                    </ScrollView>
+                )}
+
+                {/* 🟢 เนื้อหาของ Tab: ประวัติสุขภาพ (สร้างรอไว้) */}
+                {activeTab === 'health' && (
+                    <View style={styles.centerContent}>
+                        <Text style={{ color: '#666' }}>กำลังพัฒนาส่วนประวัติสุขภาพ กราฟ และวัคซีน...</Text>
                     </View>
+                )}
 
-                    <TouchableOpacity
-                        style={styles.deleteButton}
-                        onPress={handleDeletePet}
+                {/* 🟢 เนื้อหาของ Tab: QR Code */}
+                {activeTab === 'qr' && (
+                    <ScrollView
+                        style={{ flex: 1, width: '100%' }}
+                        contentContainerStyle={styles.qrScrollContainer}
+                        showsVerticalScrollIndicator={false}
                     >
-                        <Feather name="trash-2" size={20} color="#D32F2F" />
-                        <Text style={styles.deleteButtonText}>ลบสัตว์เลี้ยง</Text>
-                    </TouchableOpacity>
+                        <View style={styles.qrCard}>
+                            <View style={styles.qrHeader}>
+                                <Text style={styles.qrTitle}>QR Code ประจำตัว</Text>
+                                <Text style={styles.qrSubtitle}>{pet?.pet_name}</Text>
+                            </View>
 
-                </ScrollView>
-            )}
+                            <View style={styles.qrCodeWrapper}>
+                                {pet?.qr_code ? (
+                                    <QRCode
+                                        // 🟢 สำคัญ: ใส่ getRef เพื่อให้ฟังก์ชันดาวน์โหลดดึงรูปออกไปได้
+                                        getRef={(c) => (qrRef.current = c)}
+                                        value={`https://pawtag-app.com/pet/${pet.qr_code}`}
+                                        size={200}
+                                        color="#1A1A1A"
+                                        backgroundColor="#FFFFFF"
+                                    />
+                                ) : (
+                                    <Text style={styles.errorText}>ไม่พบรหัส QR Code</Text>
+                                )}
+                            </View>
 
-            {/* 🟢 เนื้อหาของ Tab: ประวัติสุขภาพ (สร้างรอไว้) */}
-            {activeTab === 'health' && (
-                <View style={styles.centerContent}>
-                    <Text style={{ color: '#666' }}>กำลังพัฒนาส่วนประวัติสุขภาพ กราฟ และวัคซีน...</Text>
-                </View>
-            )}
+                            <Text style={styles.qrInstruction}>
+                                ให้สัตวแพทย์หรือพนักงานคลินิกสแกน{"\n"}
+                                เพื่อเข้าถึงประวัติข้อมูลของ {pet?.pet_name || 'สัตว์เลี้ยง'}
+                            </Text>
 
-            {/* 🟢 เนื้อหาของ Tab: QR Code (สร้างรอไว้) */}
-            {activeTab === 'qr' && (
-                <View style={styles.centerContent}>
-                    <Text style={{ color: '#666' }}>แสดงคิวอาร์โค้ดของ: {pet?.pet_name}</Text>
-                    <Text style={{ color: '#999', marginTop: 10 }}>ID: {pet?.qr_code}</Text>
-                </View>
-            )}
+                            <View style={styles.qrIdBox}>
+                                <Text style={styles.qrIdLabel}>รหัสอ้างอิง:</Text>
+                                <Text style={styles.qrIdText} numberOfLines={1} ellipsizeMode="middle">
+                                    {pet?.qr_code}
+                                </Text>
+                            </View>
 
-        </View>
-    </SafeAreaView>
-);
+                            {/* 🟢 ปุ่มดาวน์โหลด QR Code */}
+                            <TouchableOpacity style={styles.downloadBtn} onPress={handleDownloadQR}>
+                                <Feather name="download" size={18} color="#FFFFFF" />
+                                <Text style={styles.downloadBtnText}>บันทึกรูป QR Code</Text>
+                            </TouchableOpacity>
+
+                        </View>
+                    </ScrollView>
+                )}
+            </View>
+        </SafeAreaView>
+    );
 }
 
 const styles = StyleSheet.create({
@@ -207,7 +286,8 @@ const styles = StyleSheet.create({
     sectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#2A4B6A', marginBottom: 10 },
     divider: { height: 1, backgroundColor: '#EEEEEE', marginBottom: 20 },
     deleteButton: {
-    backgroundColor: '#FEF2F2',flexDirection: 'row',justifyContent: 'center',alignItems: 'center',paddingVertical: 12,borderRadius: 10,marginTop: 30},
+        backgroundColor: '#FEF2F2', flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, borderRadius: 10, marginTop: 30
+    },
 
     profileSection: { alignItems: 'center', marginBottom: 20 },
     profileImage: { width: 100, height: 100, borderRadius: 50, borderWidth: 3, borderColor: '#FFFFFF', elevation: 3 },
@@ -219,4 +299,70 @@ const styles = StyleSheet.create({
     warningTitle: { fontSize: 14, fontWeight: 'bold', color: '#D32F2F', marginBottom: 8 },
     warningBox: { backgroundColor: '#FFEBEE', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#FFCDD2' },
     warningText: { color: '#D32F2F', fontSize: 13 },
+
+    qrScrollContainer: { flexGrow: 1, alignItems: 'center', paddingVertical: 20, paddingHorizontal: 16 },
+    qrCard: {
+        backgroundColor: '#FFFFFF',
+        width: '100%',
+        maxWidth: 360, // ป้องกันไม่ให้การ์ดยืดกว้างเกินไปบนจอใหญ่
+        borderRadius: 20,
+        padding: 25,
+        alignItems: 'center', // บังคับให้ของข้างในอยู่ตรงกลางทั้งหมด
+        elevation: 3,
+        shadowColor: '#000',
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 }
+    },
+    qrHeader: { alignItems: 'center', marginBottom: 25 },
+    qrTitle: { fontSize: 20, fontWeight: 'bold', color: '#2A4B6A' },
+    qrSubtitle: { fontSize: 16, color: '#666', marginTop: 4 },
+    qrCodeWrapper: {
+        padding: 15,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: '#F0F0F0',
+        alignItems: 'center',
+        justifyContent: 'center'
+    },
+    qrInstruction: { fontSize: 13, color: '#777', textAlign: 'center', marginTop: 25, lineHeight: 22 },
+    qrIdBox: {
+        marginTop: 25,
+        backgroundColor: '#F8F9FA',
+        paddingVertical: 12,
+        paddingHorizontal: 15,
+        borderRadius: 10,
+        width: '100%',
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: 1,
+        borderColor: '#EEEEEE'
+    },
+    qrIdLabel: { fontSize: 12, color: '#888', marginRight: 8, fontWeight: 'bold' },
+    qrIdText: { fontSize: 12, color: '#444', flexShrink: 1 },
+    errorText: { color: '#D32F2F', marginVertical: 20 },
+    downloadBtn: {
+        flexDirection: 'row',
+        backgroundColor: '#00B862', // สีเขียวให้ดูเป็นการเซฟ/สำเร็จ
+        paddingVertical: 12,
+        paddingHorizontal: 20,
+        borderRadius: 12,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 25,
+        width: '100%',
+        elevation: 2,
+        shadowColor: '#00B862',
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        shadowOffset: { width: 0, height: 3 }
+    },
+    downloadBtnText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginLeft: 8
+    },
 });
