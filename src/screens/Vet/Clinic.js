@@ -1,20 +1,18 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, Platform, Modal, ScrollView } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, Modal, ScrollView, Image, Linking } from 'react-native';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import ImageView from "react-native-image-viewing";
 import { API_URL } from '../../config';
 
-export default function Clinic({ vetProfile, verificationStatus, clinicStatus, setClinicStatus, clinicDetail }) {
+export default function Clinic({ vetProfile, verificationStatus, clinicStatus, setClinicStatus, clinicDetail, clinicSubmittedDocs }) {
     const [clinicSubView, setClinicSubView] = useState('list');
     const [joinModalVisible, setJoinModalVisible] = useState(false);
     const [joinCodeInput, setJoinCodeInput] = useState('');
-
-    // 🟢 State ป้องกันการกดเลือกไฟล์รัวๆ
     const [isSelecting, setIsSelecting] = useState(false);
-
-    // 🟢 State ป้องกันการกด Submit ย้ำๆ
     const [isLoading, setIsLoading] = useState(false);
+    const [fullScreenImage, setFullScreenImage] = useState(null);
 
     const [clinicForm, setClinicForm] = useState({
         clinicName: '', addressLine: '', subdistrict: '', district: '', province: '', postalCode: '', latitude: '', longitude: '', googleMapUrl: ''
@@ -22,7 +20,6 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
 
     const [ss3File, setSs3File] = useState(null);
     const [ss4File, setSs4File] = useState(null);
-
     const [openTime, setOpenTime] = useState(new Date(new Date().setHours(8, 0, 0, 0)));
     const [closeTime, setCloseTime] = useState(new Date(new Date().setHours(20, 0, 0, 0)));
     const [ss3Expiry, setSs3Expiry] = useState(null);
@@ -56,7 +53,6 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
                 else if (docType === 'ss4') setSs4File(fileData);
             }
         } catch (error) {
-            console.log('Error selecting file:', error);
             Alert.alert("ข้อผิดพลาด", "ไม่สามารถเลือกไฟล์ได้");
         } finally {
             setTimeout(() => setIsSelecting(false), 500);
@@ -74,9 +70,13 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
         }
     };
 
+    //  ตัวแปลงเวลาส่งเข้า Backend
+    const formatDbTime = (date) => `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}:00`;
+    //  ตัวแปลงเวลาโชว์หน้าจอ
     const formatTime = (date) => date.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+
     const formatDate = (date) => {
-        if (!date) return "เลือกวันที่";
+        if (!date) return "ไม่ระบุ";
         const d = new Date(date);
         return `${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}/${d.getFullYear()}`;
     };
@@ -97,14 +97,15 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
         }
 
         try {
-            // 🟢 ล็อคปุ่ม ป้องกันการกดรัว
             setIsLoading(true);
-
             const formData = new FormData();
             formData.append('vet_id', String(vetProfile.vet_id || ''));
             formData.append('clinicName', String(clinicForm.clinicName || ''));
-            const operatingHoursStr = `${formatTime(openTime)} - ${formatTime(closeTime)}`;
-            formData.append('operatingHours', operatingHoursStr);
+
+            //  ส่งเป็น format HH:MM:SS ให้ Backend
+            formData.append('openTime', formatDbTime(openTime));
+            formData.append('closeTime', formatDbTime(closeTime));
+
             formData.append('addressLine', String(clinicForm.addressLine || ''));
             formData.append('subdistrict', String(clinicForm.subdistrict || ''));
             formData.append('district', String(clinicForm.district || ''));
@@ -124,16 +125,11 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
             const ss4Blob = await ss4Res.blob();
             formData.append('ss4_license_pdf', ss4Blob, ss4File.name || 'ss4_license.pdf');
 
-            const response = await fetch(`${API_URL}/create-clinic-request`, {
-                method: 'POST',
-                body: formData,
-            });
-
+            const response = await fetch(`${API_URL}/create-clinic-request`, { method: 'POST', body: formData });
             const responseText = await response.text();
             let result;
             try { result = JSON.parse(responseText); }
             catch (e) {
-                console.error("🚨 Backend Crash Report:\n", responseText);
                 Alert.alert('Server Error', 'เซิร์ฟเวอร์ตอบกลับผิดพลาด');
                 return;
             }
@@ -145,12 +141,102 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
                 Alert.alert('เกิดข้อผิดพลาด', result.message || 'ไม่สามารถส่งคำขอได้');
             }
         } catch (error) {
-            console.error("Clinic Request Error:", error);
             Alert.alert('การเชื่อมต่อขัดข้อง', 'เกิดปัญหาในการแพ็คไฟล์ หรือเซิร์ฟเวอร์ไม่ตอบสนอง');
         } finally {
-            // 🟢 ปลดล็อคปุ่มเมื่อทำงานเสร็จ (หรือเกิด Error)
             setIsLoading(false);
         }
+    };
+
+    //  แสดงรายละเอียดทั้งหมด
+    const renderSubmittedDocs = () => {
+        if (!clinicSubmittedDocs) return null;
+        const address = clinicSubmittedDocs.address || {};
+
+        //  ดูตัวแปรที่รับมา เผื่อเช็กความถูกต้อง
+        console.log("clinic_name: ", clinicSubmittedDocs.clinic_name);
+        console.log("operating_hours: ", clinicSubmittedDocs.operating_hours);
+
+        return (
+            <View style={styles.submittedInfoContainer}>
+                <Text style={styles.inlineSectionHeading}>ข้อมูลเอกสารที่ส่งคำขอ</Text>
+
+                {/* 1. ส่วนใบอนุญาต */}
+                <View style={styles.historyItem}>
+                    <Text style={styles.historyLabel}>1. ใบอนุญาตให้ตั้งสถานพยาบาลสัตว์ (ส.ส.๓)</Text>
+                    <Text style={styles.historySubText}>หมดอายุ: {formatDate(clinicSubmittedDocs.ss3_license_expired)}</Text>
+                    {clinicSubmittedDocs.ss3_license_url ? (
+                        <TouchableOpacity onPress={() => setFullScreenImage(clinicSubmittedDocs.ss3_license_url)}>
+                            <Image source={{ uri: clinicSubmittedDocs.ss3_license_url }} style={styles.previewImage} resizeMode="cover" />
+                            <View style={styles.previewOverlay}><Feather name="zoom-in" size={20} color="#FFF" /><Text style={styles.previewText}>ดูรูปเต็ม</Text></View>
+                        </TouchableOpacity>
+                    ) : <Text style={styles.noDocText}>ไม่พบไฟล์เอกสาร</Text>}
+                </View>
+
+                <View style={styles.historyItem}>
+                    <Text style={styles.historyLabel}>2. ใบอนุญาตดำเนินการสถานพยาบาลสัตว์ (ส.ส.๔)</Text>
+                    <Text style={styles.historySubText}>หมดอายุ: {formatDate(clinicSubmittedDocs.ss4_license_expired)}</Text>
+                    {clinicSubmittedDocs.ss4_license_url ? (
+                        <TouchableOpacity onPress={() => setFullScreenImage(clinicSubmittedDocs.ss4_license_url)}>
+                            <Image source={{ uri: clinicSubmittedDocs.ss4_license_url }} style={styles.previewImage} resizeMode="cover" />
+                            <View style={styles.previewOverlay}><Feather name="zoom-in" size={20} color="#FFF" /><Text style={styles.previewText}>ดูรูปเต็ม</Text></View>
+                        </TouchableOpacity>
+                    ) : <Text style={styles.noDocText}>ไม่พบไฟล์เอกสาร</Text>}
+                </View>
+
+                {/* 2. ส่วนข้อมูลคลินิกและที่ตั้ง */}
+                <View style={styles.addressCard}>
+                    <View style={styles.addressCardHeader}>
+                        <MaterialCommunityIcons name="domain" size={20} color="#0055B3" style={{ marginRight: 8 }} />
+                        <Text style={styles.addressCardTitle}>ข้อมูลสถานพยาบาล</Text>
+                    </View>
+
+                    <View style={styles.addressCardBody}>
+                        {/*  ชื่อคลินิก */}
+                        <View style={styles.infoRowBlock}>
+                            <Text style={styles.infoTitleGray}>ชื่อสถานพยาบาลสัตว์</Text>
+                            <Text style={[styles.infoDetailDark, { fontWeight: 'bold', color: '#0055B3' }]}>
+                                {clinicSubmittedDocs.clinic_name || '-'}
+                            </Text>
+                        </View>
+
+                        {/*  เวลาเปิดปิด */}
+                        <View style={styles.infoRowBlock}>
+                            <Text style={styles.infoTitleGray}>เวลาเปิด-ปิด</Text>
+                            <Text style={styles.infoDetailDark}>
+                                {clinicSubmittedDocs.operating_hours || '-'}
+                            </Text>
+                        </View>
+
+                        <View style={styles.infoRowBlock}>
+                            <Text style={styles.infoTitleGray}>ที่อยู่ติดต่อ</Text>
+                            <Text style={styles.infoDetailDark}>
+                                {`${address.address_line || '-'} ต.${address.subdistrict || '-'} อ.${address.district || '-'} จ.${address.province || '-'} ${address.postal_code || '-'}`}
+                            </Text>
+                        </View>
+
+                        <View style={styles.infoRowBlock}>
+                            <Text style={styles.infoTitleGray}>พิกัด (ละติจูด, ลองติจูด)</Text>
+                            <Text style={styles.infoDetailDark}>{address.latitude || '-'}, {address.longitude || '-'}</Text>
+                        </View>
+
+                        <View style={[styles.infoRowBlock, { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                            <Text style={styles.infoTitleGray}>Google Map</Text>
+                            {address.google_map_url ? (
+                                <TouchableOpacity
+                                    style={styles.mapLinkBtn}
+                                    onPress={() => Linking.openURL(address.google_map_url).catch(() => Alert.alert("แจ้งเตือน", "ไม่สามารถเปิดลิงก์ได้"))}
+                                >
+                                    <Feather name="external-link" size={14} color="#0055B3" style={{ marginRight: 6 }} />
+                                    <Text style={styles.mapLinkText} numberOfLines={1}>{address.google_map_url}</Text>
+                                </TouchableOpacity>
+                            ) : (
+                                <Text style={styles.infoDetailDark}>-</Text>
+                            )}
+                        </View>
+                    </View>
+                </View>
+            </View>
+        );
     };
 
     const handleClinicAction = (action) => {
@@ -187,42 +273,52 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
 
             {clinicSubView === 'create' && (
                 <View style={styles.createFormContainer}>
+
                     {clinicStatus === 'pass' && (
-                        <View style={styles.verifiedBox}>
-                            <MaterialCommunityIcons name="domain" size={42} color="#00C853" style={{ marginRight: 16 }} />
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.verifiedTitle}>อนุมัติสถานพยาบาลแล้ว</Text>
-                                <Text style={styles.verifiedDesc}>คำขอสร้างสถานพยาบาลของคุณผ่านการตรวจสอบเรียบร้อยแล้ว</Text>
+                        <View>
+                            <View style={styles.verifiedBox}>
+                                <MaterialCommunityIcons name="domain" size={42} color="#00C853" style={{ marginRight: 16 }} />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.verifiedTitle}>อนุมัติสถานพยาบาลแล้ว</Text>
+                                    <Text style={styles.verifiedDesc}>คำขอสร้างสถานพยาบาลของคุณผ่านการตรวจสอบเรียบร้อยแล้ว</Text>
+                                </View>
                             </View>
+                            {renderSubmittedDocs()}
                         </View>
                     )}
 
                     {clinicStatus === 'pending' && (
-                        <View style={styles.pendingBox}>
-                            <MaterialCommunityIcons name="clock-outline" size={42} color="#EF6C00" style={{ marginRight: 16 }} />
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.pendingTitle}>กำลังตรวจสอบคำขอ...</Text>
-                                <Text style={styles.pendingDesc}>เอกสารคำขอเปิดสถานพยาบาลถูกส่งเข้าระบบแล้ว แอดมินจะทำการตรวจสอบและอนุมัติในภายหลัง</Text>
+                        <View>
+                            <View style={styles.pendingBox}>
+                                <MaterialCommunityIcons name="clock-outline" size={42} color="#EF6C00" style={{ marginRight: 16 }} />
+                                <View style={{ flex: 1 }}>
+                                    <Text style={styles.pendingTitle}>กำลังตรวจสอบคำขอ...</Text>
+                                    <Text style={styles.pendingDesc}>เอกสารคำขอเปิดสถานพยาบาลถูกส่งเข้าระบบแล้ว แอดมินจะทำการตรวจสอบและอนุมัติในภายหลัง</Text>
+                                </View>
                             </View>
+                            {renderSubmittedDocs()}
                         </View>
                     )}
 
                     {clinicStatus === 'notpass' && (
-                        <View style={[styles.pendingBox, { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2', flexDirection: 'column', alignItems: 'flex-start' }]}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                                <MaterialCommunityIcons name="close-circle-outline" size={42} color="#D32F2F" style={{ marginRight: 16 }} />
-                                <View style={{ flex: 1 }}>
-                                    <Text style={[styles.pendingTitle, { color: '#C62828' }]}>คำขอถูกปฏิเสธ</Text>
-                                    <Text style={[styles.pendingDesc, { color: '#D32F2F' }]}>ข้อมูลหรือเอกสารสถานพยาบาลของคุณไม่ถูกต้อง กรุณาแก้ไขและส่งใหม่อีกครั้ง</Text>
+                        <View>
+                            <View style={[styles.pendingBox, { backgroundColor: '#FFEBEE', borderColor: '#FFCDD2', flexDirection: 'column', alignItems: 'flex-start' }]}>
+                                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                    <MaterialCommunityIcons name="close-circle-outline" size={42} color="#D32F2F" style={{ marginRight: 16 }} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={[styles.pendingTitle, { color: '#C62828' }]}>คำขอถูกปฏิเสธ</Text>
+                                        <Text style={[styles.pendingDesc, { color: '#D32F2F' }]}>ข้อมูลหรือเอกสารสถานพยาบาลของคุณไม่ถูกต้อง กรุณาแก้ไขและส่งใหม่อีกครั้ง</Text>
+                                    </View>
                                 </View>
+                                <View style={styles.detailBox}>
+                                    <Text style={styles.detailLabel}>เหตุผลที่ไม่อนุมัติ:</Text>
+                                    <Text style={styles.detailText}>{clinicDetail ? clinicDetail : "ไม่ได้ระบุเหตุผล กรุณาติดต่อแอดมิน"}</Text>
+                                </View>
+                                <TouchableOpacity style={styles.reSubmitBtn} onPress={() => setClinicStatus('unsubmitted')}>
+                                    <Text style={{ color: '#FFF', fontWeight: 'bold' }}>กรอกฟอร์มส่งใหม่</Text>
+                                </TouchableOpacity>
                             </View>
-                            <View style={styles.detailBox}>
-                                <Text style={styles.detailLabel}>เหตุผลที่ไม่อนุมัติ:</Text>
-                                <Text style={styles.detailText}>{clinicDetail ? clinicDetail : "ไม่ได้ระบุเหตุผล กรุณาติดต่อแอดมิน"}</Text>
-                            </View>
-                            <TouchableOpacity style={styles.reSubmitBtn} onPress={() => setClinicStatus('unsubmitted')}>
-                                <Text style={{ color: '#FFF', fontWeight: 'bold' }}>ส่งคำขอใหม่</Text>
-                            </TouchableOpacity>
+                            {renderSubmittedDocs()}
                         </View>
                     )}
 
@@ -281,11 +377,7 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
                                 <Text style={styles.subLabel}>ไฟล์เอกสาร (PDF)</Text>
                                 <View style={styles.uploadRow}>
                                     <TextInput style={[styles.uploadInput, ss3File && { color: '#9C64A6', fontWeight: 'bold' }]} placeholder="ยังไม่ได้เลือกไฟล์" value={ss3File ? ss3File.name : ''} editable={false} />
-                                    <TouchableOpacity
-                                        style={[styles.uploadBtn, { backgroundColor: isSelecting ? '#999' : '#9C64A6' }]}
-                                        onPress={() => handleSelectFile('ss3')}
-                                        disabled={isSelecting}
-                                    >
+                                    <TouchableOpacity style={[styles.uploadBtn, { backgroundColor: isSelecting ? '#999' : '#9C64A6' }]} onPress={() => handleSelectFile('ss3')} disabled={isSelecting}>
                                         <Text style={styles.uploadBtnText}>{isSelecting ? 'รอสักครู่...' : 'เลือกไฟล์'}</Text>
                                     </TouchableOpacity>
                                 </View>
@@ -301,22 +393,13 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
                                 <Text style={styles.subLabel}>ไฟล์เอกสาร (PDF)</Text>
                                 <View style={styles.uploadRow}>
                                     <TextInput style={[styles.uploadInput, ss4File && { color: '#9C64A6', fontWeight: 'bold' }]} placeholder="ยังไม่ได้เลือกไฟล์" value={ss4File ? ss4File.name : ''} editable={false} />
-                                    <TouchableOpacity
-                                        style={[styles.uploadBtn, { backgroundColor: isSelecting ? '#999' : '#9C64A6' }]}
-                                        onPress={() => handleSelectFile('ss4')}
-                                        disabled={isSelecting}
-                                    >
+                                    <TouchableOpacity style={[styles.uploadBtn, { backgroundColor: isSelecting ? '#999' : '#9C64A6' }]} onPress={() => handleSelectFile('ss4')} disabled={isSelecting}>
                                         <Text style={styles.uploadBtnText}>{isSelecting ? 'รอสักครู่...' : 'เลือกไฟล์'}</Text>
                                     </TouchableOpacity>
                                 </View>
                             </View>
 
-                            {/* 🟢 อัปเดตปุ่ม Submit ป้องกันการกดรัว */}
-                            <TouchableOpacity
-                                style={[styles.submitFormButton, { backgroundColor: isLoading ? '#999' : '#9C64A6' }]}
-                                onPress={handleSubmitClinicRequest}
-                                disabled={isLoading} // ล็อคปุ่มระหว่างอัปโหลด
-                            >
+                            <TouchableOpacity style={[styles.submitFormButton, { backgroundColor: isLoading ? '#999' : '#9C64A6' }]} onPress={handleSubmitClinicRequest} disabled={isLoading}>
                                 <Text style={styles.submitFormText}>{isLoading ? "กำลังอัปโหลดเอกสาร..." : "ส่งคำขอเปิดสถานพยาบาล"}</Text>
                             </TouchableOpacity>
                         </View>
@@ -329,8 +412,7 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
                     value={
                         pickerConfig.target === 'openTime' ? openTime :
                             pickerConfig.target === 'closeTime' ? closeTime :
-                                pickerConfig.target === 'ss3' ? (ss3Expiry || new Date()) :
-                                    (ss4Expiry || new Date())
+                                pickerConfig.target === 'ss3' ? (ss3Expiry || new Date()) : (ss4Expiry || new Date())
                     }
                     mode={pickerConfig.mode}
                     display="default"
@@ -354,6 +436,14 @@ export default function Clinic({ vetProfile, verificationStatus, clinicStatus, s
                     </View>
                 </View>
             </Modal>
+
+            <ImageView
+                images={fullScreenImage ? [{ uri: fullScreenImage }] : []}
+                imageIndex={0}
+                visible={!!fullScreenImage}
+                onRequestClose={() => setFullScreenImage(null)}
+                swipeToCloseEnabled={true}
+            />
         </View>
     );
 }
@@ -420,5 +510,27 @@ const styles = StyleSheet.create({
     detailBox: { backgroundColor: '#FFF', padding: 12, borderRadius: 8, marginTop: 12, width: '100%', borderWidth: 1, borderColor: '#FFCDD2' },
     detailLabel: { fontSize: 12, fontWeight: 'bold', color: '#C62828', marginBottom: 4 },
     detailText: { fontSize: 13, color: '#333' },
-    reSubmitBtn: { marginTop: 16, alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#D32F2F', borderRadius: 8 }
+    reSubmitBtn: { marginTop: 16, alignSelf: 'flex-start', paddingHorizontal: 16, paddingVertical: 10, backgroundColor: '#D32F2F', borderRadius: 8 },
+
+    //  Styles สำหรับ Inline Preview (ปรับให้สวยงามขึ้น)
+    submittedInfoContainer: { marginTop: 16, padding: 16, backgroundColor: '#FFF', borderRadius: 12, borderWidth: 1, borderColor: '#EAEAEC' },
+    inlineSectionHeading: { fontSize: 14, fontWeight: 'bold', color: '#1A1A1A', marginBottom: 16, textAlign: 'center' },
+    historyItem: { marginBottom: 20, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+    historyLabel: { fontSize: 13, fontWeight: 'bold', color: '#1A1A1A', marginBottom: 4 },
+    historySubText: { fontSize: 12, color: '#666', marginBottom: 10 },
+    previewImage: { width: '100%', height: 160, borderRadius: 8, borderWidth: 1, borderColor: '#EAEAEC', backgroundColor: '#F0F0F0' },
+    previewOverlay: { position: 'absolute', bottom: 10, right: 10, backgroundColor: 'rgba(0,0,0,0.6)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, flexDirection: 'row', alignItems: 'center' },
+    previewText: { color: '#FFF', fontSize: 12, marginLeft: 6, fontWeight: 'bold' },
+    noDocText: { fontSize: 13, color: '#999', fontStyle: 'italic', marginTop: 8 },
+
+    //  Styles สำหรับข้อมูลที่อยู่ (แบบใหม่)
+    addressCard: { backgroundColor: '#F8F9FA', borderRadius: 12, borderWidth: 1, borderColor: '#EAEAEC', overflow: 'hidden', marginTop: 10 },
+    addressCardHeader: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F0F4F8', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#EAEAEC' },
+    addressCardTitle: { fontSize: 14, fontWeight: 'bold', color: '#0055B3' },
+    addressCardBody: { padding: 16 },
+    infoRowBlock: { marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+    infoTitleGray: { fontSize: 12, color: '#888', fontWeight: 'bold', marginBottom: 4 },
+    infoDetailDark: { fontSize: 14, color: '#1A1A1A', lineHeight: 22 },
+    mapLinkBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E3F2FD', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, alignSelf: 'flex-start', marginTop: 4, maxWidth: '100%' },
+    mapLinkText: { fontSize: 13, color: '#0055B3', fontWeight: 'bold', flexShrink: 1 }
 });

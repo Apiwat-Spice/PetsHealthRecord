@@ -38,7 +38,7 @@ exports.uploadVetLicense = async (req, res) => {
             });
         };
 
-        // 🟢 ตรวจสอบว่าเคยมีรูปเก่าไหม ถ้ามีให้ลบทิ้งก่อน
+        //  ตรวจสอบว่าเคยมีรูปเก่าไหม ถ้ามีให้ลบทิ้งก่อน
         const { data: oldLicense } = await supabase
             .from('vet_license')
             .select('vet_license_pdf_public_id, vet_id_card_pdf_public_id')
@@ -167,43 +167,26 @@ exports.createClinicRequest = async (req, res) => {
         const uploadToCloudinary = (fileBuffer, folder) => {
             return new Promise((resolve, reject) => {
                 const stream = cloudinary.uploader.upload_stream(
-                    {
-                        resource_type: "image", // 🟢 บังคับให้อ่านเป็นรูปภาพ
-                        folder: folder,
-                        format: "jpg" // 🟢 สั่งแปลง PDF ให้กลายเป็น JPG
-                    },
-                    // ❌ ลบชุดคำสั่ง options อันที่สองออกไปแล้ว
-                    (error, result) => {
-                        if (error) reject(error);
-                        else resolve(result);
-                    }
+                    { resource_type: "image", folder: folder, format: "jpg" },
+                    (error, result) => { if (error) reject(error); else resolve(result); }
                 );
                 stream.end(fileBuffer);
             });
         };
 
-        // 🟢 ตรวจสอบว่าเคยมีรูปเก่าไหม ถ้ามีให้ลบทิ้งก่อน
-        const { data: oldClinicLicense } = await supabase
-            .from('clinic_license')
-            .select('ss3_license_public_id, ss4_license_public_id')
-            .eq('vet_id', data.vet_id)
-            .single();
-
+        const { data: oldClinicLicense } = await supabase.from('clinic_license').select('ss3_license_public_id, ss4_license_public_id').eq('vet_id', data.vet_id).single();
         if (oldClinicLicense) {
-            if (oldClinicLicense.ss3_license_public_id) {
-                await cloudinary.uploader.destroy(oldClinicLicense.ss3_license_public_id).catch(err => console.log("ลบรูปเก่า SS3 ไม่สำเร็จ", err));
-            }
-            if (oldClinicLicense.ss4_license_public_id) {
-                await cloudinary.uploader.destroy(oldClinicLicense.ss4_license_public_id).catch(err => console.log("ลบรูปเก่า SS4 ไม่สำเร็จ", err));
-            }
+            if (oldClinicLicense.ss3_license_public_id) await cloudinary.uploader.destroy(oldClinicLicense.ss3_license_public_id).catch(() => {});
+            if (oldClinicLicense.ss4_license_public_id) await cloudinary.uploader.destroy(oldClinicLicense.ss4_license_public_id).catch(() => {});
         }
 
         console.log("1. กำลังอัปโหลดเอกสารคลินิกขึ้น Cloud...");
         const ss3Result = await uploadToCloudinary(files.ss3_license_pdf[0].buffer, "clinic_documents/ss.3");
         const ss4Result = await uploadToCloudinary(files.ss4_license_pdf[0].buffer, "clinic_documents/ss.4");
 
-        console.log("2. กำลังบันทึกข้อมูลลงฐานข้อมูล 3 ตาราง...");
+        console.log("2. กำลังบันทึกข้อมูลลงฐานข้อมูล 4 ตาราง...");
 
+        // ตารางที่ 1: clinic_license
         const { data: clinicLicenseData, error: clinicLicenseError } = await supabase
             .from('clinic_license')
             .upsert({
@@ -220,6 +203,7 @@ exports.createClinicRequest = async (req, res) => {
 
         if (clinicLicenseError) throw clinicLicenseError;
 
+        // ตารางที่ 2: vetclinic_address
         const { data: addressData, error: addressError } = await supabase
             .from('vetclinic_address')
             .insert({
@@ -237,21 +221,37 @@ exports.createClinicRequest = async (req, res) => {
 
         if (addressError) throw addressError;
 
-        const { error: documentError } = await supabase
+        // ตารางที่ 3: vet_clinic_document
+        const { data: documentData, error: documentError } = await supabase
             .from('vet_clinic_document')
             .insert({
                 clinic_license_id: clinicLicenseData.clinic_license_id,
                 vetclinic_address_id: addressData.vetclinic_address_id,
                 status: 'pending'
-            });
+            })
+            .select('vet_clinic_document_id')
+            .single();
 
         if (documentError) throw documentError;
 
-        console.log("✅ ส่งคำขอคลินิกและบันทึกลง Document สำเร็จ!");
+        //  ตารางที่ 4: vet_clinic (บันทึกชื่อ และ เวลาเปิดปิด)
+        const { error: clinicError } = await supabase
+            .from('vet_clinic')
+            .insert({
+                vet_clinic_document_id: documentData.vet_clinic_document_id,
+                vet_clinic_name: data.clinicName,
+                vet_clinic_open: data.openTime, // e.g., '08:00:00'
+                vet_clinic_close: data.closeTime, // e.g., '20:00:00'
+                vet_clinic_verified: false
+            });
+
+        if (clinicError) throw clinicError;
+
+        console.log("✅ ส่งคำขอคลินิกและบันทึกลง Database ครบถ้วน!");
         return res.status(200).json({ message: "ส่งคำขอสร้างสถานพยาบาลเรียบร้อยแล้ว!" });
 
     } catch (error) {
-        console.error("Create Clinic Request Error:", error);
+        console.error("Create Clinic Error:", error);
         return res.status(500).json({ message: "เกิดข้อผิดพลาดในการสร้างสถานพยาบาล" });
     }
 };
@@ -263,33 +263,67 @@ exports.checkClinicStatus = async (req, res) => {
     try {
         const vetId = req.params.vetId;
 
-        const { data: licenseData, error: licenseError } = await supabase
+        const { data: licenseData } = await supabase
             .from('clinic_license')
-            .select('clinic_license_id')
+            .select('*')
             .eq('vet_id', vetId)
             .order('created_at', { ascending: false })
             .limit(1);
 
         if (!licenseData || licenseData.length === 0) return res.status(200).json({ status: 'unsubmitted' });
 
-        const latestLicenseId = licenseData[0].clinic_license_id;
+        const latestLicense = licenseData[0];
 
-        const { data: docData, error: docError } = await supabase
+        const { data: docData } = await supabase
             .from('vet_clinic_document')
-            .select('status, detail')
-            .eq('clinic_license_id', latestLicenseId)
+            .select('vet_clinic_document_id, status, detail, vetclinic_address_id')
+            .eq('clinic_license_id', latestLicense.clinic_license_id)
             .order('created_at', { ascending: false })
-            .limit(1); // แก้ไขแบบเดียวกับ vet
+            .limit(1);
 
         if (docData && docData.length > 0) {
             const latestDoc = docData[0];
-            return res.status(200).json({ status: latestDoc.status, detail: latestDoc.detail });
+            
+            // ดึงที่อยู่
+            let addressData = null;
+            if (latestDoc.vetclinic_address_id) {
+                const { data: addrData } = await supabase.from('vetclinic_address').select('*').eq('vetclinic_address_id', latestDoc.vetclinic_address_id).single();
+                addressData = addrData;
+            }
+
+            //  ดึงข้อมูลคลินิก (ชื่อและเวลา) จากตาราง vet_clinic
+            let clinicInfo = null;
+            if (latestDoc.vet_clinic_document_id) {
+                const { data: vClinicData } = await supabase
+                    .from('vet_clinic')
+                    .select('vet_clinic_name, vet_clinic_open, vet_clinic_close')
+                    .eq('vet_clinic_document_id', latestDoc.vet_clinic_document_id)
+                    .single();
+                clinicInfo = vClinicData;
+            }
+
+            // จัดรูปแบบเวลาให้อ่านง่าย เช่น "08:00 - 20:00"
+            let operating_hours = '-';
+            if (clinicInfo && clinicInfo.vet_clinic_open && clinicInfo.vet_clinic_close) {
+                operating_hours = `${clinicInfo.vet_clinic_open.slice(0, 5)} - ${clinicInfo.vet_clinic_close.slice(0, 5)}`;
+            }
+
+            return res.status(200).json({ 
+                status: latestDoc.status, 
+                detail: latestDoc.detail,
+                submittedDocs: {
+                    ...latestLicense,
+                    clinic_name: clinicInfo?.vet_clinic_name || '-', //  ส่งชื่อคลินิก
+                    operating_hours: operating_hours, //  ส่งเวลาเปิด-ปิด
+                    address: addressData 
+                } 
+            });
         } else {
             return res.status(200).json({ status: 'unsubmitted' });
         }
 
     } catch (error) {
-        console.error("Check Clinic Status Error:", error);
+        console.error("Check Clinic Error:", error);
         return res.status(500).json({ message: "เกิดข้อผิดพลาดในการตรวจสอบสถานะคลินิก" });
     }
 };

@@ -26,11 +26,14 @@ export default function ProfileVET({ setIsLoggedIn }) {
   const [verificationStatus, setVerificationStatus] = useState('unsubmitted');
   const [verificationDetail, setVerificationDetail] = useState(''); // สำหรับเก็บรายละเอียดเพิ่มเติมเมื่อสถานะเป็น notpass
 
-  // 🟢 เพิ่ม State สำหรับเก็บข้อมูลเอกสารที่เคยส่งไปแล้ว
+  // 🟢 State สำหรับเก็บข้อมูลเอกสารที่เคยส่งไปแล้วของ "สัตวแพทย์"
   const [submittedDocs, setSubmittedDocs] = useState(null);
 
   const [clinicStatus, setClinicStatus] = useState('unsubmitted');
   const [clinicDetail, setClinicDetail] = useState('');
+
+  // 🟢 State สำหรับเก็บข้อมูลเอกสารที่เคยส่งไปแล้วของ "คลินิก" (เพิ่มใหม่)
+  const [clinicSubmittedDocs, setClinicSubmittedDocs] = useState(null);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -84,15 +87,22 @@ export default function ProfileVET({ setIsLoggedIn }) {
             const clinicRes = await fetch(`${API_URL}/check-clinic-status/${profile.vet_id}`);
             const clinicData = await clinicRes.json();
 
+            console.log("==== ข้อมูลคลินิกจาก Backend ====", JSON.stringify(clinicData, null, 2));
+
             if (clinicRes.ok && clinicData.status) {
               setClinicStatus(clinicData.status);
               setClinicDetail(clinicData.detail || '');
+
+              // 🟢 อัปเดตข้อมูลเอกสารลง State เพื่อส่งไปให้หน้า Clinic
+              setClinicSubmittedDocs(clinicData.submittedDocs || null);
             } else {
               setClinicStatus('unsubmitted');
+              setClinicSubmittedDocs(null);
             }
           } catch (error) {
             console.error("Fetch clinic status error:", error);
             setClinicStatus('unsubmitted');
+            setClinicSubmittedDocs(null);
           }
         }
       } catch (error) {
@@ -199,6 +209,7 @@ export default function ProfileVET({ setIsLoggedIn }) {
               clinicStatus={clinicStatus}
               setClinicStatus={setClinicStatus}
               clinicDetail={clinicDetail}
+              clinicSubmittedDocs={clinicSubmittedDocs} // 🟢 แนบ Props ข้อมูลเอกสารลงไปที่หน้า Clinic
             />
           )}
 
@@ -208,7 +219,7 @@ export default function ProfileVET({ setIsLoggedIn }) {
               verificationStatus={verificationStatus}
               setVerificationStatus={setVerificationStatus}
               verificationDetail={verificationDetail}
-              submittedDocs={submittedDocs} // 🟢 แนบ Props ข้อมูลเอกสารลงไปที่หน้า Verify
+              submittedDocs={submittedDocs}
             />
           )}
         </View>
