@@ -257,12 +257,13 @@ exports.createClinicRequest = async (req, res) => {
 };
 
 // ==========================================
-// 4. ฟังก์ชันเช็กสถานะคำขอสร้างสถานพยาบาล
+// 4. ฟังก์ชันเช็กสถานะคำขอสร้างสถานพยาบาล (และเช็กว่าเป็นพนักงานหรือไม่)
 // ==========================================
 exports.checkClinicStatus = async (req, res) => {
     try {
         const vetId = req.params.vetId;
 
+        //  ส่วนที่ 1: ตรวจสอบว่าเป็น "เจ้าของสถานพยาบาล" หรือไม่? (จาก clinic_license)
         const { data: licenseData } = await supabase
             .from('clinic_license')
             .select('*')
@@ -270,57 +271,111 @@ exports.checkClinicStatus = async (req, res) => {
             .order('created_at', { ascending: false })
             .limit(1);
 
-        if (!licenseData || licenseData.length === 0) return res.status(200).json({ status: 'unsubmitted' });
+        if (licenseData && licenseData.length > 0) {
+            const latestLicense = licenseData[0];
 
-        const latestLicense = licenseData[0];
+            const { data: docData } = await supabase
+                .from('vet_clinic_document')
+                .select('vet_clinic_document_id, status, detail, vetclinic_address_id')
+                .eq('clinic_license_id', latestLicense.clinic_license_id)
+                .order('created_at', { ascending: false })
+                .limit(1);
 
-        const { data: docData } = await supabase
-            .from('vet_clinic_document')
-            .select('vet_clinic_document_id, status, detail, vetclinic_address_id')
-            .eq('clinic_license_id', latestLicense.clinic_license_id)
-            .order('created_at', { ascending: false })
-            .limit(1);
+            if (docData && docData.length > 0) {
+                const latestDoc = docData[0];
+                
+                let addressData = null;
+                if (latestDoc.vetclinic_address_id) {
+                    const { data: addrData } = await supabase.from('vetclinic_address').select('*').eq('vetclinic_address_id', latestDoc.vetclinic_address_id).single();
+                    addressData = addrData;
+                }
 
-        if (docData && docData.length > 0) {
-            const latestDoc = docData[0];
-            
-            // ดึงที่อยู่
-            let addressData = null;
-            if (latestDoc.vetclinic_address_id) {
-                const { data: addrData } = await supabase.from('vetclinic_address').select('*').eq('vetclinic_address_id', latestDoc.vetclinic_address_id).single();
-                addressData = addrData;
+                let clinicInfo = null;
+                if (latestDoc.vet_clinic_document_id) {
+                    const { data: vClinicData } = await supabase
+                        .from('vet_clinic')
+                        .select('vet_clinic_name, vet_clinic_open, vet_clinic_close')
+                        .eq('vet_clinic_document_id', latestDoc.vet_clinic_document_id)
+                        .single();
+                    clinicInfo = vClinicData;
+                }
+
+                let operating_hours = '-';
+                if (clinicInfo && clinicInfo.vet_clinic_open && clinicInfo.vet_clinic_close) {
+                    operating_hours = `${clinicInfo.vet_clinic_open.slice(0, 5)} - ${clinicInfo.vet_clinic_close.slice(0, 5)}`;
+                }
+
+                //  คืนค่าข้อมูลสำหรับ "เจ้าของคลินิก" (owner)
+                return res.status(200).json({ 
+                    status: latestDoc.status, 
+                    detail: latestDoc.detail,
+                    role: 'owner', // <-- ระบุ Role ว่าเป็นเจ้าของ
+                    submittedDocs: {
+                        ...latestLicense,
+                        clinic_name: clinicInfo?.vet_clinic_name || '-', 
+                        operating_hours: operating_hours, 
+                        address: addressData 
+                    } 
+                });
             }
-
-            //  ดึงข้อมูลคลินิก (ชื่อและเวลา) จากตาราง vet_clinic
-            let clinicInfo = null;
-            if (latestDoc.vet_clinic_document_id) {
-                const { data: vClinicData } = await supabase
-                    .from('vet_clinic')
-                    .select('vet_clinic_name, vet_clinic_open, vet_clinic_close')
-                    .eq('vet_clinic_document_id', latestDoc.vet_clinic_document_id)
-                    .single();
-                clinicInfo = vClinicData;
-            }
-
-            // จัดรูปแบบเวลาให้อ่านง่าย เช่น "08:00 - 20:00"
-            let operating_hours = '-';
-            if (clinicInfo && clinicInfo.vet_clinic_open && clinicInfo.vet_clinic_close) {
-                operating_hours = `${clinicInfo.vet_clinic_open.slice(0, 5)} - ${clinicInfo.vet_clinic_close.slice(0, 5)}`;
-            }
-
-            return res.status(200).json({ 
-                status: latestDoc.status, 
-                detail: latestDoc.detail,
-                submittedDocs: {
-                    ...latestLicense,
-                    clinic_name: clinicInfo?.vet_clinic_name || '-', //  ส่งชื่อคลินิก
-                    operating_hours: operating_hours, //  ส่งเวลาเปิด-ปิด
-                    address: addressData 
-                } 
-            });
-        } else {
-            return res.status(200).json({ status: 'unsubmitted' });
         }
+
+        //  ส่วนที่ 2: ถ้าไม่ใช่เจ้าของ ให้ไปตรวจว่าเป็น "สัตวแพทย์ประจำ (พนักงาน)" หรือไม่?
+        // ค้นหาในตาราง clinic_vet_staff
+        const { data: staffData } = await supabase
+            .from('clinic_vet_staff')
+            .select('vet_clinic_id, status')
+            .eq('vet_id', vetId)
+            .eq('status', 'active') // เอาเฉพาะคนที่สถานะยัง Active อยู่
+            .single();
+
+        if (staffData) {
+            // ถ้าเจอว่าเป็นพนักงาน ให้ไปดึงข้อมูลคลินิกที่เขาสังกัดมาโชว์
+            const { data: clinicData } = await supabase
+                .from('vet_clinic')
+                .select(`
+                    vet_clinic_name, 
+                    vet_clinic_open, 
+                    vet_clinic_close,
+                    vet_clinic_document (
+                        vetclinic_address_id
+                    )
+                `)
+                .eq('vet_clinic_id', staffData.vet_clinic_id)
+                .single();
+
+            // ดึงที่อยู่ของคลินิก (ถ้ามี)
+            let addressData = null;
+            if (clinicData?.vet_clinic_document?.vetclinic_address_id) {
+                 const { data: addrData } = await supabase
+                    .from('vetclinic_address')
+                    .select('*')
+                    .eq('vetclinic_address_id', clinicData.vet_clinic_document.vetclinic_address_id)
+                    .single();
+                 addressData = addrData;
+            }
+
+            let operating_hours = '-';
+            if (clinicData && clinicData.vet_clinic_open && clinicData.vet_clinic_close) {
+                operating_hours = `${clinicData.vet_clinic_open.slice(0, 5)} - ${clinicData.vet_clinic_close.slice(0, 5)}`;
+            }
+
+            //  คืนค่าข้อมูลสำหรับ "พนักงาน" (staff)
+            // ให้สถานะเป็น 'pass' เพื่อให้แอปโชว์ Badge สีม่วงได้
+            return res.status(200).json({
+                status: 'pass',
+                detail: '',
+                role: 'staff', // <-- ระบุ Role ว่าเป็นพนักงาน
+                submittedDocs: {
+                    clinic_name: clinicData?.vet_clinic_name || '-',
+                    operating_hours: operating_hours,
+                    address: addressData
+                }
+            });
+        }
+
+        //  ส่วนที่ 3: ถ้าไม่เจอทั้งในฐานะเจ้าของและพนักงาน
+        return res.status(200).json({ status: 'unsubmitted' });
 
     } catch (error) {
         console.error("Check Clinic Error:", error);

@@ -11,7 +11,7 @@ import Register from "./src/screens/auth/Register";
 import OTP from "./src/screens/auth/OTP";
 
 import VetNavigator from "./src/screens/Vet/VetNavigator";
-
+import ClinicNavigator from "./src/screens/Clinic/ClinicNavigator";
 import PetOwnerTabs from "./src/navigation/PetOwnerTabs";
 
 const Stack = createNativeStackNavigator();
@@ -25,11 +25,11 @@ export default function App() {
     const checkLogin = async () => {
       try {
         const token = await SecureStore.getItemAsync("token");
-        const userStr = await SecureStore.getItemAsync("user"); // ดึงข้อมูล user มาดู Role ด้วย
+        const userStr = await SecureStore.getItemAsync("user");
 
         if (token && userStr) {
           const user = JSON.parse(userStr);
-          setUserRole(user.role); // เซ็ต Role ('pet_owner' หรือ 'vet')
+          setUserRole(user.role);
           setIsLoggedIn(true);
         } else {
           setIsLoggedIn(false);
@@ -45,7 +45,6 @@ export default function App() {
     checkLogin();
   }, []);
 
-  // ฟังก์ชันสำหรับตอน Login เสร็จ (ส่งให้ Login.js ไปเรียกใช้)
   const handleLoginSuccess = (role) => {
     setUserRole(role);
     setIsLoggedIn(true);
@@ -60,12 +59,21 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {isLoggedIn ? (
-            //ถ้าล็อกอินแล้ว เช็ก Role ว่าให้ไปหน้าไหน
+            // ถ้าล็อกอินแล้ว เช็ก Role ว่าให้ไปหน้าไหน
             userRole === "vet" ? (
-              <Stack.Screen name="VetNavigator">
-                {(props) => <VetNavigator {...props} setIsLoggedIn={setIsLoggedIn} />}
-              </Stack.Screen>
+              //  ฝั่งของสัตวแพทย์ (Vet) จะมี 2 Navigator ให้สลับไปมาได้
+              <>
+                <Stack.Screen name="VetNavigator">
+                  {(props) => <VetNavigator {...props} setIsLoggedIn={setIsLoggedIn} />}
+                </Stack.Screen>
+
+                {/*  เพิ่มหน้า ClinicNav เข้ามา เพื่อให้ ProfileVET กดกระโดดมาได้ */}
+                <Stack.Screen name="ClinicNav">
+                  {(props) => <ClinicNavigator {...props} setIsLoggedIn={setIsLoggedIn} />}
+                </Stack.Screen>
+              </>
             ) : (
+              //  ฝั่งของเจ้าของสัตว์เลี้ยง (Pet Owner)
               <Stack.Screen name="PetOwnerTabs">
                 {(props) => <PetOwnerTabs {...props} setIsLoggedIn={setIsLoggedIn} />}
               </Stack.Screen>
@@ -77,9 +85,9 @@ export default function App() {
 
               <Stack.Screen name="Login">
                 {(props) => (
-                  <LoginScreen 
-                    {...props} 
-                    onLoginSuccess={handleLoginSuccess} //ส่งฟังก์ชันใหม่เข้าไปแทน
+                  <LoginScreen
+                    {...props}
+                    onLoginSuccess={handleLoginSuccess}
                   />
                 )}
               </Stack.Screen>

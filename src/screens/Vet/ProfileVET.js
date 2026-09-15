@@ -1,16 +1,17 @@
-import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, StatusBar, Platform, Alert } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react'; // 🟢 1. Import useCallback
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, StatusBar, Platform, Alert, RefreshControl } from 'react-native'; // 🟢 2. Import RefreshControl
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
+import { useNavigation } from '@react-navigation/native';
 
 import { API_URL } from '../../config';
-
-// Import 2 ไฟล์ที่เราเพิ่งสร้างแยกออกไป
 import Verify from './Verify';
 import Clinic from './Clinic';
 
 export default function ProfileVET({ setIsLoggedIn }) {
+  const navigation = useNavigation();
+
   const [vetProfile, setVetProfile] = useState({
     user_id: '',
     vet_id: '',
@@ -22,94 +23,102 @@ export default function ProfileVET({ setIsLoggedIn }) {
   });
 
   const [activeTab, setActiveTab] = useState('info');
-  // ตั้งค่าเริ่มต้นเป็น unsubmitted (ยังไม่ได้ส่ง) เสมอ เพื่อให้ฟอร์มอัปโหลดโชว์ขึ้นมาเป็นค่าเริ่มต้น
   const [verificationStatus, setVerificationStatus] = useState('unsubmitted');
-  const [verificationDetail, setVerificationDetail] = useState(''); // สำหรับเก็บรายละเอียดเพิ่มเติมเมื่อสถานะเป็น notpass
-
-  // 🟢 State สำหรับเก็บข้อมูลเอกสารที่เคยส่งไปแล้วของ "สัตวแพทย์"
+  const [verificationDetail, setVerificationDetail] = useState('');
   const [submittedDocs, setSubmittedDocs] = useState(null);
 
   const [clinicStatus, setClinicStatus] = useState('unsubmitted');
   const [clinicDetail, setClinicDetail] = useState('');
-
-  // 🟢 State สำหรับเก็บข้อมูลเอกสารที่เคยส่งไปแล้วของ "คลินิก" (เพิ่มใหม่)
   const [clinicSubmittedDocs, setClinicSubmittedDocs] = useState(null);
 
-  useEffect(() => {
-    const loadProfile = async () => {
-      try {
-        const profileStr = await SecureStore.getItemAsync('vet_profile');
-        const userStr = await SecureStore.getItemAsync('user');
+  const [clinicName, setClinicName] = useState('กำลังโหลด...');
+  const [clinicRole, setClinicRole] = useState('');
 
-        if (profileStr && userStr) {
-          const profile = JSON.parse(profileStr);
-          const user = JSON.parse(userStr);
+  // 🟢 3. State สำหรับจัดการสถานะการ Refresh
+  const [refreshing, setRefreshing] = useState(false);
 
-          // เช็กค่า Profile ที่ดึงมาจากเครื่อง
-          console.log("==== 🔍 ข้อมูลโปรไฟล์หมอในเครื่อง ====", profile);
+  const isFullyVerified = verificationStatus === 'pass' && clinicStatus === 'pass';
 
-          setVetProfile({
-            user_id: user.user_id,
-            vet_id: profile.vet_id, // ⚠️ ตรงนี้สำคัญมาก ถ้าค่าเป็น undefined มันจะหาไม่เจอ
-            name: `${profile.firstname} ${profile.lastname}`,
-            email: user.email || 'ไม่ระบุ',
-            phone: profile.phone || 'ไม่ระบุ',
-            roleLevel: profile.vet_class ? `สัตวแพทย์ชั้น ${profile.vet_class}` : 'สัตวแพทย์',
-          });
+  // 🟢 4. แยกฟังก์ชันดึงข้อมูลออกมา เพื่อให้เรียกใช้ได้ทั้งตอนเข้าหน้าเว็บและตอน Pull-to-refresh
+  const loadProfile = async () => {
+    try {
+      const profileStr = await SecureStore.getItemAsync('vet_profile');
+      const userStr = await SecureStore.getItemAsync('user');
 
-          // ยิง API ไปถาม Database ว่าสถานะปัจจุบันคืออะไร
-          try {
-            console.log(`==== 🚀 ยิง API เช็กสถานะของหมอ ID: ${profile.vet_id} ====`);
-            const response = await fetch(`${API_URL}/check-vet-status/${profile.vet_id}`);
-            const data = await response.json();
+      if (profileStr && userStr) {
+        const profile = JSON.parse(profileStr);
+        const user = JSON.parse(userStr);
 
-            console.log("==== 📥 Backend ตอบสถานะกลับมาว่า: ====", data.status);
+        setVetProfile({
+          user_id: user.user_id,
+          vet_id: profile.vet_id,
+          name: `${profile.firstname} ${profile.lastname}`,
+          email: user.email || 'ไม่ระบุ',
+          phone: profile.phone || 'ไม่ระบุ',
+          roleLevel: profile.vet_class ? `สัตวแพทย์ชั้น ${profile.vet_class}` : 'สัตวแพทย์',
+        });
 
-            if (response.ok && data.status) {
-              setVerificationStatus(data.status); // (pass, pending, notpass, unsubmitted)
-              setVerificationDetail(data.detail || '');
-
-              // 🟢 อัปเดตข้อมูลเอกสารลง State เพื่อส่งไปให้หน้า Verify
-              setSubmittedDocs(data.submittedDocs || null);
-
-            } else {
-              setVerificationStatus('unsubmitted');
-              setSubmittedDocs(null);
-            }
-          } catch (fetchError) {
-            console.error("Fetch status error:", fetchError);
+        // ดึงสถานะยืนยันตัวตน
+        try {
+          const response = await fetch(`${API_URL}/check-vet-status/${profile.vet_id}`);
+          const data = await response.json();
+          if (response.ok && data.status) {
+            setVerificationStatus(data.status);
+            setVerificationDetail(data.detail || '');
+            setSubmittedDocs(data.submittedDocs || null);
+          } else {
             setVerificationStatus('unsubmitted');
             setSubmittedDocs(null);
           }
+        } catch (fetchError) {
+          setVerificationStatus('unsubmitted');
+          setSubmittedDocs(null);
+        }
 
-          // เช็กสถานะคลินิก
-          try {
-            const clinicRes = await fetch(`${API_URL}/check-clinic-status/${profile.vet_id}`);
-            const clinicData = await clinicRes.json();
+        // ดึงสถานะคลินิก
+        try {
+          const clinicRes = await fetch(`${API_URL}/check-clinic-status/${profile.vet_id}`);
+          const clinicData = await clinicRes.json();
+          if (clinicRes.ok && clinicData.status) {
+            setClinicStatus(clinicData.status);
+            setClinicDetail(clinicData.detail || '');
+            setClinicSubmittedDocs(clinicData.submittedDocs || null);
 
-            console.log("==== ข้อมูลคลินิกจาก Backend ====", JSON.stringify(clinicData, null, 2));
-
-            if (clinicRes.ok && clinicData.status) {
-              setClinicStatus(clinicData.status);
-              setClinicDetail(clinicData.detail || '');
-
-              // 🟢 อัปเดตข้อมูลเอกสารลง State เพื่อส่งไปให้หน้า Clinic
-              setClinicSubmittedDocs(clinicData.submittedDocs || null);
+            if (clinicData.submittedDocs && clinicData.submittedDocs.clinic_name) {
+              setClinicName(clinicData.submittedDocs.clinic_name);
             } else {
-              setClinicStatus('unsubmitted');
-              setClinicSubmittedDocs(null);
+              setClinicName('คลินิก (ไม่มีชื่อ)');
             }
-          } catch (error) {
-            console.error("Fetch clinic status error:", error);
+
+            if (clinicData.role === 'staff') {
+              setClinicRole('staff');
+            } else {
+              setClinicRole('owner');
+            }
+          } else {
             setClinicStatus('unsubmitted');
             setClinicSubmittedDocs(null);
           }
+        } catch (error) {
+          setClinicStatus('unsubmitted');
+          setClinicSubmittedDocs(null);
         }
-      } catch (error) {
-        console.log("Load profile error:", error);
       }
-    };
+    } catch (error) {
+      console.log("Load profile error:", error);
+    }
+  };
+
+  useEffect(() => {
     loadProfile();
+  }, []);
+
+  // 🟢 5. ฟังก์ชันเมื่อผู้ใช้ลากหน้าจอลงมา
+  const onRefresh = useCallback(() => {
+    setRefreshing(true); // แสดงไอคอนหมุนๆ
+    loadProfile().then(() => {
+      setRefreshing(false); // ซ่อนไอคอนเมื่อโหลดเสร็จ
+    });
   }, []);
 
   const handleLogout = () => {
@@ -122,7 +131,10 @@ export default function ProfileVET({ setIsLoggedIn }) {
             await SecureStore.deleteItemAsync("token");
             await SecureStore.deleteItemAsync("user");
             await SecureStore.deleteItemAsync("vet_profile");
-            setIsLoggedIn(false);
+
+            if (setIsLoggedIn) {
+              setIsLoggedIn(false);
+            }
           } catch (error) {
             console.error("Logout Error:", error);
             Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถออกจากระบบได้");
@@ -130,6 +142,10 @@ export default function ProfileVET({ setIsLoggedIn }) {
         },
       },
     ]);
+  };
+
+  const switchToClinicMode = () => {
+    navigation.navigate("ClinicNav");
   };
 
   return (
@@ -141,20 +157,29 @@ export default function ProfileVET({ setIsLoggedIn }) {
         <Text style={styles.vetNameText}>{vetProfile.name}</Text>
       </View>
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-
-        {/* Profile Card */}
+      <ScrollView
+        style={styles.scrollView}
+        showsVerticalScrollIndicator={false}
+        // 🟢 6. แนบ RefreshControl เข้าไปใน ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#00B862']} // สีของวงกลมหมุนๆ (Android)
+            tintColor="#00B862"   // สีของวงกลมหมุนๆ (iOS)
+          />
+        }
+      >
         <View style={styles.profileHeaderCard}>
           <View style={styles.avatarCircle}><Feather name="user" size={42} color="#1A1A1A" /></View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{vetProfile.name}</Text>
             <Text style={styles.profileEmail}>{vetProfile.email}</Text>
 
-            {/* Badges */}
             {verificationStatus === 'pass' ? (
               <View style={styles.badgeRow}>
                 <View style={styles.badgeGreen}><Text style={styles.badgeGreenText}>{vetProfile.roleLevel}</Text></View>
-                <View style={[styles.badgeGreen, { marginLeft: 6 }]}><Text style={styles.badgeGreenText}>ยืนยันแล้ว</Text></View>
+                <View style={[styles.badgeGreen, { marginLeft: 6 }]}><Text style={styles.badgeGreenText}>ยืนยันตัวตนแล้ว</Text></View>
               </View>
             ) : verificationStatus === 'pending' ? (
               <View style={styles.badgeRow}>
@@ -166,24 +191,48 @@ export default function ProfileVET({ setIsLoggedIn }) {
               </View>
             ) : (
               <View style={styles.badgeRow}>
-                <View style={[styles.badgeOrange, { backgroundColor: '#F5F5F5' }]}><Text style={[styles.badgeOrangeText, { color: '#666' }]}>ยังไม่ได้ส่งเอกสารยืนยันตัวตน</Text></View>
+                <View style={[styles.badgeOrange, { backgroundColor: '#F5F5F5' }]}><Text style={[styles.badgeOrangeText, { color: '#666' }]}>ยังไม่ได้ส่งเอกสาร</Text></View>
               </View>
             )}
 
-            {verificationStatus === 'pass' && vetProfile.clinicOwnerTitle ? (
-              <View style={styles.badgePurple}><Text style={styles.badgePurpleText}>{vetProfile.clinicOwnerTitle}</Text></View>
-            ) : null}
+            {clinicStatus === 'pass' && (
+              <View style={styles.badgeRow}>
+                <View style={styles.badgePurple}>
+                  <Text style={styles.badgePurpleText}>
+                    {clinicRole === 'owner' ? `เป็นเจ้าของ${clinicName}` : `เป็นสัตวแพทย์ประจำ${clinicName}`}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Tab Switcher */}
+        {isFullyVerified && clinicRole === 'owner' && (
+          <View style={styles.switchModeContainer}>
+            <TouchableOpacity style={styles.switchModeBtn} onPress={switchToClinicMode}>
+              <View style={styles.switchIconBg}>
+                <MaterialCommunityIcons name="domain" size={24} color="#FFF" />
+              </View>
+              <View style={styles.switchTextContainer}>
+                <Text style={styles.switchModeTitle}>สลับเป็นโหมดสถานพยาบาล</Text>
+                <Text style={styles.switchModeSub}>เปลี่ยนไปจัดการข้อมูลและนัดหมายคลินิก</Text>
+              </View>
+              <Feather name="chevron-right" size={24} color="#0055B3" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.tabSwitcher}>
           <TouchableOpacity style={[styles.tabItem, activeTab === 'info' && styles.tabItemActive]} onPress={() => setActiveTab('info')}>
             <Text style={[styles.tabText, activeTab === 'info' && styles.tabTextActive]}>ข้อมูลผู้ใช้</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.tabItem, activeTab === 'clinic' && styles.tabItemActive]} onPress={() => setActiveTab('clinic')}>
-            <Text style={[styles.tabText, activeTab === 'clinic' && styles.tabTextActive]}>คลินิก</Text>
-          </TouchableOpacity>
+
+          {clinicRole !== 'staff' && (
+            <TouchableOpacity style={[styles.tabItem, activeTab === 'clinic' && styles.tabItemActive]} onPress={() => setActiveTab('clinic')}>
+              <Text style={[styles.tabText, activeTab === 'clinic' && styles.tabTextActive]}>คลินิก</Text>
+            </TouchableOpacity>
+          )}
+
           <TouchableOpacity style={[styles.tabItem, activeTab === 'verification' && styles.tabItemActive]} onPress={() => setActiveTab('verification')}>
             <Text style={[styles.tabText, activeTab === 'verification' && styles.tabTextActive]}>ยืนยันตัวตน</Text>
           </TouchableOpacity>
@@ -202,14 +251,14 @@ export default function ProfileVET({ setIsLoggedIn }) {
             </View>
           )}
 
-          {activeTab === 'clinic' && (
+          {activeTab === 'clinic' && clinicRole !== 'staff' && (
             <Clinic
               vetProfile={vetProfile}
               verificationStatus={verificationStatus}
               clinicStatus={clinicStatus}
               setClinicStatus={setClinicStatus}
               clinicDetail={clinicDetail}
-              clinicSubmittedDocs={clinicSubmittedDocs} // 🟢 แนบ Props ข้อมูลเอกสารลงไปที่หน้า Clinic
+              clinicSubmittedDocs={clinicSubmittedDocs}
             />
           )}
 
@@ -249,11 +298,36 @@ const styles = StyleSheet.create({
   badgeOrangeText: { color: '#EF6C00', fontSize: 10, fontWeight: 'bold' },
   badgePurple: { backgroundColor: '#F3E5F5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start' },
   badgePurpleText: { color: '#9C64A6', fontSize: 10, fontWeight: 'bold' },
-  tabSwitcher: { flexDirection: 'row', backgroundColor: '#F5F5F5', margin: 16, borderRadius: 10, padding: 4 },
+
+  switchModeContainer: { paddingHorizontal: 16, marginTop: 20 },
+  switchModeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E3F2FD',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#90CAF9',
+  },
+  switchIconBg: {
+    backgroundColor: '#0055B3',
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  switchTextContainer: { flex: 1 },
+  switchModeTitle: { fontSize: 16, fontWeight: 'bold', color: '#0055B3', marginBottom: 4 },
+  switchModeSub: { fontSize: 12, color: '#5A7584' },
+
+  tabSwitcher: { flexDirection: 'row', backgroundColor: '#F5F5F5', marginHorizontal: 16, marginTop: 20, marginBottom: 16, borderRadius: 10, padding: 4 },
   tabItem: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },
   tabItemActive: { backgroundColor: '#FFFFFF', elevation: 1 },
   tabText: { fontSize: 13, color: '#888', fontWeight: 'bold' },
   tabTextActive: { color: '#00B862' },
+
   tabContent: { paddingHorizontal: 16 },
   cardBox: { backgroundColor: '#FFFFFF', borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#EAEAEC' },
   infoLabel: { fontSize: 13, fontWeight: 'bold', color: '#1A1A1A', marginTop: 10 },

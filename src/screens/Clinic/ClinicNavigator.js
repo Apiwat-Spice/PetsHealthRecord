@@ -8,15 +8,10 @@ import TeamClinic from './TeamClinic';
 import DateClinic from './DateClinic';
 import ProfileClinic from './ProfileClinic';
 
-const DummyScreen = ({ route }) => (
-    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFAFA' }}>
-        <Text style={{ fontSize: 18, color: '#9C27B0', fontWeight: 'bold' }}>กำลังสร้างหน้า {route.name}...</Text>
-    </View>
-);
-
 const Tab = createBottomTabNavigator();
 
-export default function ClinicNavigator() {
+//  รับ props setIsLoggedIn เข้ามา
+export default function ClinicNavigator({ setIsLoggedIn }) {
     return (
         <Tab.Navigator
             screenOptions={({ route }) => ({
@@ -37,7 +32,6 @@ export default function ClinicNavigator() {
                     marginTop: 4,
                 },
                 tabBarIcon: ({ color }) => {
-                    // Icon ตาม Tab
                     if (route.name === 'Dashboard') {
                         return <Feather name="home" size={24} color={color} />;
                     } else if (route.name === 'Team') {
@@ -53,7 +47,12 @@ export default function ClinicNavigator() {
             <Tab.Screen name="Dashboard" component={DashboardClinic} />
             <Tab.Screen name="Team" component={TeamClinic} />
             <Tab.Screen name="Date" component={DateClinic} />
-            <Tab.Screen name="Clinic" component={ProfileClinic} />
+            
+            {/* 🟢 ส่ง props setIsLoggedIn ต่อไปให้หน้า ProfileClinic */}
+            <Tab.Screen name="Clinic">
+                {(props) => <ProfileClinic {...props} setIsLoggedIn={setIsLoggedIn} />}
+            </Tab.Screen>
+            
         </Tab.Navigator>
     );
 }
