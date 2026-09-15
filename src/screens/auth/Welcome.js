@@ -1,20 +1,16 @@
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, ImageBackground, Image, Pressable } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { StyleSheet, Text, View, ImageBackground, Image, Pressable, SafeAreaView } from 'react-native';
 
 export default function Welcome({ navigation }) {
   return (
     <ImageBackground
-      source={require('../../../src/public/pictures/background-welcome.png')}
+      source={require('../../../src/public/pictures/background-welcome-new.png')}
       style={styles.background}
       resizeMode="cover"
     >
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container}>
 
-        <Pressable style={styles.infoButton}>
-          <Feather name="info" size={24} color="black" />
-        </Pressable>
-
+        {/* Main Content Centered */}
         <View style={styles.contentContainer}>
           <View style={styles.logoContainer}>
             <Image
@@ -24,37 +20,39 @@ export default function Welcome({ navigation }) {
             />
           </View>
 
-          <Text style={styles.titleWelcome}>Welcome to </Text>
+          <Text style={styles.titleWelcome}>Welcome to</Text>
           <Text style={styles.titleApp}>Digital Pet Health Record</Text>
           <Text style={styles.slogan}>
             “Take better care of your pet with everything{'\n'}you need in one place.”
           </Text>
         </View>
 
-        <View style={styles.bottomBar}>
+        {/* Floating Action Buttons at the Bottom */}
+        <View style={styles.buttonContainer}>
           <Pressable
             style={({ pressed }) => [
               styles.button,
-              styles.buttonBorder,
+              styles.buttonSignIn,
               pressed && styles.buttonPressed
             ]}
             onPress={() => navigation.navigate("Login")}
           >
-            <Text style={styles.buttonText}>Sign in</Text>
+            <Text style={styles.buttonTextWhite}>Sign in</Text>
           </Pressable>
 
           <Pressable
             style={({ pressed }) => [
               styles.button,
+              styles.buttonSignUp,
               pressed && styles.buttonPressed
             ]}
             onPress={() => navigation.navigate("Register")}
           >
-            <Text style={styles.buttonText}>Sign up</Text>
+            <Text style={styles.buttonTextWhite}>Sign up</Text>
           </Pressable>
         </View>
 
-      </View>
+      </SafeAreaView>
       <StatusBar style="dark" />
     </ImageBackground>
   );
@@ -67,79 +65,83 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-  },
-  infoButton: {
-    alignSelf: 'flex-end',
-    paddingHorizontal: 20,
-    paddingTop: 45,
+    justifyContent: 'space-between', // Pushes content to middle and buttons to bottom
   },
   contentContainer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 30,
-    paddingBottom: 60,
+    paddingHorizontal: 20,
+    marginTop: 40, // Adjust this to move the block up or down
   },
   logoContainer: {
     backgroundColor: '#FFFFFF',
-    width: 170,
-    height: 170,
-    borderRadius: 35,
+    width: 200,
+    height: 200,
+    borderRadius: 45, // Soft rounded corners for the app icon look
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 25,
+    marginBottom: 40,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 10,
+    elevation: 5,
   },
   logo: {
-    width: 150,
-    height: 130,
+    width: 160,
+    height: 140,
   },
   titleWelcome: {
-    fontSize: 40,
+    fontSize: 42,
     fontWeight: '900',
     color: '#5A7584',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   titleApp: {
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: 'bold',
     color: '#5A7584',
-    marginBottom: 25,
+    marginBottom: 20,
   },
   slogan: {
     fontSize: 14,
     fontStyle: 'italic',
     fontWeight: 'bold',
     textAlign: 'center',
-    color: '#000',
+    color: '#1A1A1A',
     lineHeight: 22,
   },
-  bottomBar: {
+  buttonContainer: {
     flexDirection: 'row',
-    height: 100,
-    backgroundColor: '#F7F7F2',
-    borderTopWidth: 1,
-    borderColor: '#D3D3D3',
+    justifyContent: 'space-between',
+    paddingHorizontal: 24,
+    paddingBottom: 40, // Space from the bottom edge
   },
   button: {
-    flex: 1,
+    flex: 0.48, // Takes up just under half the row width each
+    height: 60,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  buttonBorder: {
-    borderRightWidth: 1,
-    borderColor: '#D3D3D3',
+  buttonSignIn: {
+    backgroundColor: '#A0C4D8', // Light blue/gray from the reference image
+  },
+  buttonSignUp: {
+    backgroundColor: '#6A899C', // Darker blue/gray from the reference image
   },
   buttonPressed: {
-    backgroundColor: '#FFFFFF',
+    opacity: 0.8,
   },
-  buttonText: {
+  buttonTextWhite: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#5A7584',
+    color: '#FFFFFF',
   }
 });
