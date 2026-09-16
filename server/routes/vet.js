@@ -7,7 +7,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 const vetController = require('../controllers/vetController'); // ชี้ไปที่ไฟล์ที่คุณสร้างฟังก์ชันเมื่อกี้
 
-// 🟢 สร้าง Route สำหรับอัปโหลด โดยระบุชื่อฟิลด์ให้ตรงกับฝั่งแอป
+//  สร้าง Route สำหรับอัปโหลดใบประกอบวิชาชีพ
 router.post('/upload-vet-license',
   upload.fields([
     { name: 'vet_license_pdf', maxCount: 1 },
@@ -15,6 +15,15 @@ router.post('/upload-vet-license',
   ]),
   vetController.uploadVetLicense
 );
+
+router.post('/upload-vet-profile',
+  upload.fields([
+    { name: 'profile_image', maxCount: 1 }
+  ]),
+  vetController.uploadVetProfile
+);
+
+//  สร้าง Route สำหรับคำขอเปิดสถานพยาบาล
 router.post('/create-clinic-request',
   upload.fields([
     { name: 'ss3_license_pdf', maxCount: 1 },
@@ -23,6 +32,15 @@ router.post('/create-clinic-request',
   ]),
   vetController.createClinicRequest
 );
+
+//  สร้าง Route สำหรับอัปโหลดโลโก้สถานพยาบาล (เพิ่มใหม่ตรงนี้ครับ!)
+router.post('/upload-clinic-logo',
+  upload.fields([
+    { name: 'clinic_logo', maxCount: 1 }
+  ]),
+  vetController.uploadClinicLogo
+);
+
 // ดึงข้อมูลสถานะการยืนยันตัวตน
 router.get('/check-vet-status/:userId', vetController.checkVetStatus);
 // ดึงข้อมูลสถานะคำขอคลินิก

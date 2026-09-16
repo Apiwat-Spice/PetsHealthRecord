@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, StatusBar, Platform, Alert, Modal, Image, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, StatusBar, Platform, Alert, Modal, Image, Dimensions, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as SecureStore from 'expo-secure-store';
+import ImageView from "react-native-image-viewing";
+import * as DocumentPicker from 'expo-document-picker';
 import { API_URL } from '../../config';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -11,15 +13,17 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 export default function ProfileClinic({ setIsLoggedIn }) {
     const navigation = useNavigation();
 
+    const [vetId, setVetId] = useState(null);
     const [clinicRole, setClinicRole] = useState('กำลังโหลด...');
     const [vetClass, setVetClass] = useState('-');
-    const [isEditing, setIsEditing] = useState(false);
 
     const [showDocModal, setShowDocModal] = useState(false);
-    const [clinicDocs, setClinicDocs] = useState(null); 
-    
-    //  State สำหรับเก็บ URL รูปภาพที่ต้องการแสดงเต็มจอ
-    const [fullScreenImage, setFullScreenImage] = useState(null);
+    const [clinicDocs, setClinicDocs] = useState(null);
+    const [viewerImages, setViewerImages] = useState([]);
+    const [isViewerVisible, setIsViewerVisible] = useState(false);
+
+    const [clinicLogo, setClinicLogo] = useState(null);
+    const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
     const [clinicData, setClinicData] = useState({
         clinicName: 'กำลังโหลดข้อมูล...',
@@ -30,39 +34,52 @@ export default function ProfileClinic({ setIsLoggedIn }) {
         hours: '-',
         licenseNo: '-',
         verified: false,
-        isOwner: false
+        isOwner: false,
+        clinicId: null
     });
-
-    const [editForm, setEditForm] = useState({ ...clinicData });
 
     useEffect(() => {
         const fetchClinicData = async () => {
+            console.log("==== 🔄 [ProfileClinic] เริ่มโหลดข้อมูลคลินิก ====");
             try {
                 const profileStr = await SecureStore.getItemAsync('vet_profile');
                 const userStr = await SecureStore.getItemAsync('user');
-                
-                if (!profileStr) return;
+
+                if (!profileStr) {
+                    console.log("⚠️ [ProfileClinic] ไม่พบข้อมูล vet_profile ในเครื่อง");
+                    return;
+                }
 
                 const profile = JSON.parse(profileStr);
                 const user = userStr ? JSON.parse(userStr) : {};
-                const vetId = profile.vet_id;
+                const currentVetId = profile.vet_id;
 
+                console.log(`👤 [ProfileClinic] Vet ID ปัจจุบัน: ${currentVetId}`);
+
+                setVetId(currentVetId);
                 setVetClass(profile.vet_class ? `สัตวแพทย์ชั้น ${profile.vet_class}` : 'สัตวแพทย์');
 
-                const res = await fetch(`${API_URL}/check-clinic-status/${vetId}`);
+                console.log(`📡 [ProfileClinic] กำลังเรียก API: ${API_URL}/check-clinic-status/${currentVetId}`);
+                const res = await fetch(`${API_URL}/check-clinic-status/${currentVetId}`);
                 const data = await res.json();
+
+                console.log(`📥 [ProfileClinic] API ตอบกลับ (Status: ${res.status}):`, JSON.stringify(data, null, 2));
 
                 if (res.ok && data.status === 'pass' && data.submittedDocs) {
                     const docs = data.submittedDocs;
-                    
-                    setClinicDocs(docs); 
+                    setClinicDocs(docs);
 
                     const addr = docs.address || {};
                     const fullAddress = `${addr.address_line || ''} ต.${addr.subdistrict || ''} อ.${addr.district || ''} จ.${addr.province || ''} ${addr.postal_code || ''}`.trim();
 
                     const isOwner = data.role === 'owner';
-                    
+                    console.log(`🛡️ [ProfileClinic] สิทธิ์ของผู้ใช้: ${isOwner ? 'Owner (เจ้าของ)' : 'Staff (พนักงาน)'}`);
                     setClinicRole(isOwner ? 'เจ้าของสถานพยาบาล' : 'สัตวแพทย์ประจำคลินิก');
+
+                    if (docs.vet_clinic_image_url) {
+                        console.log(`🖼️ [ProfileClinic] พบโลโก้คลินิก: ${docs.vet_clinic_image_url}`);
+                        setClinicLogo(docs.vet_clinic_image_url);
+                    }
 
                     setClinicData({
                         clinicName: docs.clinic_name || 'ไม่ระบุชื่อ',
@@ -73,11 +90,14 @@ export default function ProfileClinic({ setIsLoggedIn }) {
                         hours: docs.operating_hours || '-',
                         licenseNo: docs.clinic_license_id ? `CLC-${docs.clinic_license_id.toString().padStart(6, '0')}` : '-',
                         verified: true,
-                        isOwner: isOwner 
+                        isOwner: isOwner,
+                        clinicId: docs.vet_clinic_id
                     });
+                } else {
+                    console.log("⚠️ [ProfileClinic] ไม่พบข้อมูลคลินิกที่ผ่านการยืนยันแล้ว");
                 }
             } catch (error) {
-                console.error("Error fetching clinic data:", error);
+                console.error("🚨 [ProfileClinic] Error fetching clinic data:", error);
                 Alert.alert("ข้อผิดพลาด", "ไม่สามารถโหลดข้อมูลคลินิกได้");
             }
         };
@@ -85,72 +105,108 @@ export default function ProfileClinic({ setIsLoggedIn }) {
         fetchClinicData();
     }, []);
 
-    useEffect(() => {
-        setEditForm(clinicData);
-    }, [clinicData]);
-
-    const handleToggleEdit = () => {
-        if (isEditing) {
-            setClinicData(editForm);
-            Alert.alert('สำเร็จ', 'ฟังก์ชันอัปเดตคลินิกจะถูกเพิ่มในภายหลัง');
-        } else {
-            setEditForm({ ...clinicData });
+    const handlePickAndUploadLogo = async () => {
+        console.log("==== 📸 [ProfileClinic] เริ่มกระบวนการเปลี่ยนรูปร้าน ====");
+        if (!clinicData.isOwner) {
+            Alert.alert("สิทธิ์การใช้งาน", "เฉพาะเจ้าของสถานพยาบาลเท่านั้นที่สามารถเปลี่ยนรูปได้");
+            return;
         }
-        setIsEditing(!isEditing);
+
+        try {
+            const result = await DocumentPicker.getDocumentAsync({
+                type: ['image/jpeg', 'image/png'], 
+                copyToCacheDirectory: true,
+            });
+
+            if (!result.canceled && result.assets && result.assets.length > 0) {
+                const file = result.assets[0];
+                console.log(`📄 [ProfileClinic] ไฟล์ที่เลือก: ${file.name}`);
+                
+                setIsUploadingLogo(true);
+                const formData = new FormData();
+                
+                formData.append('vet_id', String(vetId));
+                
+                // 🟢 กลับมาใช้วิธีแปลงเป็น Blob (วิธีที่เวิร์ค 100% สำหรับโปรเจกต์ของคุณ)
+                console.log("📦 กำลังแปลงไฟล์เป็น Blob...");
+                const fileResponse = await fetch(file.uri);
+                const blob = await fileResponse.blob();
+                
+                // แนบ Blob เข้าไปใน FormData
+                formData.append('clinic_logo', blob, file.name || 'logo.jpg');
+
+                console.log(`📤 กำลังส่งข้อมูลไปที่ API: ${API_URL}/upload-clinic-logo`);
+                const response = await fetch(`${API_URL}/upload-clinic-logo`, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'Accept': 'application/json',
+                        // ห้ามใส่ Content-Type: multipart/form-data ตรงนี้ ปล่อยให้ RN จัดการเอง
+                    },
+                });
+
+                const resultText = await response.text();
+                let resultData;
+                try {
+                    resultData = JSON.parse(resultText);
+                } catch (e) {
+                    throw new Error("เซิร์ฟเวอร์ตอบกลับผิดพลาด: " + resultText);
+                }
+
+                if (response.ok) {
+                    console.log("✅ อัปโหลดรูปสำเร็จ โชว์รูปใหม่บนหน้าจอ");
+                    setClinicLogo(resultData.logo_url);
+                    Alert.alert("สำเร็จ", "อัปเดตรูปภาพสถานพยาบาลเรียบร้อยแล้ว");
+                } else {
+                    Alert.alert("ข้อผิดพลาด", resultData.message || "ไม่สามารถอัปโหลดรูปภาพได้");
+                }
+            }
+        } catch (err) {
+            console.error("🚨 Upload Logo Error:", err);
+            Alert.alert("ข้อผิดพลาด", "เกิดปัญหาในการอัปโหลดรูปภาพ: " + (err.message || "Unknown error"));
+        } finally {
+            setIsUploadingLogo(false);
+            console.log("==== 🏁 จบกระบวนการอัปโหลดรูปร้าน ====");
+        }
     };
 
-    const renderEditField = (label, key, isMultiline = false) => (
-        <View style={styles.editFieldContainer}>
-            <Text style={styles.editLabel}>{label}</Text>
-            <View style={styles.editInputRow}>
-                <TextInput
-                    style={[styles.editInput, isMultiline && { height: 60, textAlignVertical: 'top', paddingTop: 10 }]}
-                    value={editForm[key]}
-                    onChangeText={(text) => setEditForm({ ...editForm, [key]: text })}
-                    multiline={isMultiline}
-                />
-                <TouchableOpacity style={styles.editInlineBtn} onPress={() => Alert.alert('แก้ไข', `อัปเดต ${label}`)}>
-                    <Text style={styles.editInlineBtnText}>แก้ไข</Text>
-                </TouchableOpacity>
-            </View>
-        </View>
-    );
-
     const switchToVetMode = () => {
-        navigation.navigate("VetNavigator");
+        console.log("🔄 [ProfileClinic] สลับไปโหมดสัตวแพทย์");
+        navigation.navigate("VetNavigator", { screen: "Profile" });
     };
 
     const handleLogout = () => {
-        Alert.alert(
-            "ออกจากระบบ",
-            "คุณต้องการออกจากระบบหรือไม่?",
-            [
-                { text: "ยกเลิก", style: "cancel" },
-                {
-                    text: "ออกจากระบบ",
-                    style: "destructive",
-                    onPress: async () => {
-                        try {
-                            await SecureStore.deleteItemAsync("token");
-                            await SecureStore.deleteItemAsync("user");
-                            await SecureStore.deleteItemAsync("vet_profile");
-                            
-                            if (setIsLoggedIn) {
-                                setIsLoggedIn(false);
-                            } else {
-                                navigation.reset({
-                                    index: 0,
-                                    routes: [{ name: 'Welcome' }], 
-                                });
-                            }
-                        } catch (error) {
-                            console.error("Logout Error:", error);
-                            Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถออกจากระบบได้");
+        Alert.alert("ออกจากระบบ", "คุณต้องการออกจากระบบหรือไม่?", [
+            { text: "ยกเลิก", style: "cancel" },
+            {
+                text: "ออกจากระบบ", style: "destructive",
+                onPress: async () => {
+                    console.log("🚪 [ProfileClinic] กดยืนยันออกจากระบบ กำลังเคลียร์ข้อมูล...");
+                    try {
+                        await SecureStore.deleteItemAsync("token");
+                        await SecureStore.deleteItemAsync("user");
+                        await SecureStore.deleteItemAsync("vet_profile");
+
+                        console.log("✅ [ProfileClinic] เคลียร์ข้อมูล SecureStore สำเร็จ");
+
+                        if (setIsLoggedIn) {
+                            setIsLoggedIn(false);
+                        } else {
+                            navigation.reset({ index: 0, routes: [{ name: 'Welcome' }] });
                         }
+                    } catch (error) {
+                        console.error("🚨 [ProfileClinic] Logout Error:", error);
+                        Alert.alert("ข้อผิดพลาด", "ไม่สามารถออกจากระบบได้");
                     }
                 }
-            ]
-        );
+            }
+        ]);
+    };
+
+    const openFullScreenImage = (imageUrl) => {
+        console.log(`🔍 [ProfileClinic] เปิดดูรูปเต็มจอ: ${imageUrl}`);
+        setViewerImages([{ uri: imageUrl }]);
+        setIsViewerVisible(true);
     };
 
     return (
@@ -185,65 +241,74 @@ export default function ProfileClinic({ setIsLoggedIn }) {
                         </View>
 
                         <View style={styles.profileCard}>
-                            <TouchableOpacity style={styles.editIconBtn} onPress={handleToggleEdit}>
-                                <Feather name={isEditing ? "download" : "edit"} size={20} color="#333" />
-                            </TouchableOpacity>
-
                             <View style={styles.profileTopRow}>
-                                <View style={styles.logoPlaceholder}></View>
+                                <TouchableOpacity
+                                    style={styles.logoContainer}
+                                    onPress={handlePickAndUploadLogo}
+                                    disabled={isUploadingLogo || !clinicData.isOwner}
+                                >
+                                    {clinicLogo ? (
+                                        <Image source={{ uri: clinicLogo }} style={styles.logoImage} />
+                                    ) : (
+                                        <View style={styles.logoPlaceholder}>
+                                            <Feather name="camera" size={24} color="#FFF" />
+                                        </View>
+                                    )}
+
+                                    {isUploadingLogo && (
+                                        <View style={styles.uploadingOverlay}>
+                                            <ActivityIndicator size="small" color="#FFF" />
+                                        </View>
+                                    )}
+
+                                    {clinicData.isOwner && !isUploadingLogo && (
+                                        <View style={styles.editBadgeIcon}>
+                                            <Feather name="edit-2" size={12} color="#FFF" />
+                                        </View>
+                                    )}
+                                </TouchableOpacity>
+
                                 <View style={styles.profileTopInfo}>
                                     <Text style={styles.clinicTitleText}>{clinicData.clinicName}</Text>
                                 </View>
                             </View>
 
-                            {!isEditing ? (
-                                <>
-                                    <View style={styles.vetInfoWrapper}>
-                                        <Text style={styles.vetNameText}>{clinicData.vetName}</Text>
-                                        
-                                        <View style={styles.badgeRow}>
-                                            <View style={styles.badgeGreenSmall}>
-                                                <Text style={styles.badgeGreenSmallText}>{vetClass}</Text>
-                                            </View>
-                                            
-                                            {clinicData.isOwner && (
-                                                <View style={[styles.badgePurpleSmall, { marginLeft: 6 }]}>
-                                                    <Text style={styles.badgePurpleSmallText}>
-                                                        เจ้าของ{clinicData.clinicName}
-                                                    </Text>
-                                                </View>
-                                            )}
-                                        </View>
-                                        
-                                        {clinicData.email && clinicData.email !== '-' ? (
-                                            <Text style={styles.emailText}>{clinicData.email}</Text>
-                                        ) : null}
+                            <View style={styles.vetInfoWrapper}>
+                                <Text style={styles.vetNameText}>{clinicData.vetName}</Text>
+
+                                <View style={styles.badgeRow}>
+                                    <View style={styles.badgeGreenSmall}>
+                                        <Text style={styles.badgeGreenSmallText}>{vetClass}</Text>
                                     </View>
 
-                                    <View style={styles.infoSection}>
-                                        <View style={styles.infoRow}>
-                                            <Feather name="map-pin" size={16} color="#666" style={styles.infoIcon} />
-                                            <Text style={styles.infoText}>{clinicData.address}</Text>
+                                    {clinicData.isOwner && (
+                                        <View style={[styles.badgePurpleSmall, { marginLeft: 6 }]}>
+                                            <Text style={styles.badgePurpleSmallText}>
+                                                เจ้าของ{clinicData.clinicName}
+                                            </Text>
                                         </View>
-                                        <View style={styles.infoRow}>
-                                            <Feather name="phone" size={16} color="#666" style={styles.infoIcon} />
-                                            <Text style={styles.infoText}>{clinicData.phone}</Text>
-                                        </View>
-                                        <View style={styles.infoRow}>
-                                            <Feather name="clock" size={16} color="#666" style={styles.infoIcon} />
-                                            <Text style={styles.infoText}>{clinicData.hours}</Text>
-                                        </View>
-                                    </View>
-                                </>
-                            ) : (
-                                <View style={styles.editSection}>
-                                    {renderEditField('ชื่อแพทย์', 'vetName')}
-                                    {renderEditField('อีเมล', 'email')}
-                                    {renderEditField('ที่อยู่', 'address', true)}
-                                    {renderEditField('เบอร์', 'phone')}
-                                    {renderEditField('วันเปิด-ปิด', 'hours')}
+                                    )}
                                 </View>
-                            )}
+
+                                {clinicData.email && clinicData.email !== '-' ? (
+                                    <Text style={styles.emailText}>{clinicData.email}</Text>
+                                ) : null}
+                            </View>
+
+                            <View style={styles.infoSection}>
+                                <View style={styles.infoRow}>
+                                    <Feather name="map-pin" size={16} color="#666" style={styles.infoIcon} />
+                                    <Text style={styles.infoText}>{clinicData.address}</Text>
+                                </View>
+                                <View style={styles.infoRow}>
+                                    <Feather name="phone" size={16} color="#666" style={styles.infoIcon} />
+                                    <Text style={styles.infoText}>{clinicData.phone}</Text>
+                                </View>
+                                <View style={styles.infoRow}>
+                                    <Feather name="clock" size={16} color="#666" style={styles.infoIcon} />
+                                    <Text style={styles.infoText}>{clinicData.hours}</Text>
+                                </View>
+                            </View>
                         </View>
 
                         <View style={styles.licenseCard}>
@@ -267,10 +332,7 @@ export default function ProfileClinic({ setIsLoggedIn }) {
                             )}
                         </View>
 
-                        <TouchableOpacity
-                            style={styles.logoutBtn}
-                            onPress={handleLogout}
-                        >
+                        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
                             <Text style={styles.logoutBtnText}>ออกจากระบบ</Text>
                         </TouchableOpacity>
 
@@ -279,25 +341,16 @@ export default function ProfileClinic({ setIsLoggedIn }) {
                 </ScrollView>
             </View>
 
-            {/* Modal รายละเอียดเอกสารหลัก */}
-            <Modal
-                visible={showDocModal}
-                animationType="slide"
-                transparent={true}
-                onRequestClose={() => setShowDocModal(false)}
-            >
+            <Modal visible={showDocModal} animationType="slide" transparent={true} onRequestClose={() => setShowDocModal(false)}>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
-                        
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitle}>รายละเอียดเอกสารคำขอ</Text>
                             <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowDocModal(false)}>
                                 <Feather name="x" size={24} color="#666" />
                             </TouchableOpacity>
                         </View>
-
                         <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
-                            
                             <View style={styles.docSection}>
                                 <Text style={styles.docSectionTitle}>ข้อมูลสถานพยาบาล</Text>
                                 <View style={styles.docRow}>
@@ -313,96 +366,43 @@ export default function ProfileClinic({ setIsLoggedIn }) {
                             <View style={styles.docSection}>
                                 <Text style={styles.docSectionTitle}>ใบอนุญาตให้ให้ตั้งสถานพยาบาลสัตว์ (ส.ส.๓)</Text>
                                 {clinicDocs?.ss3_license_url ? (
-                                    //  หุ้มรูปด้วย TouchableOpacity เพื่อกดซูมภาพ
-                                    <TouchableOpacity activeOpacity={0.8} onPress={() => setFullScreenImage(clinicDocs.ss3_license_url)}>
+                                    <TouchableOpacity activeOpacity={0.8} onPress={() => openFullScreenImage(clinicDocs.ss3_license_url)}>
                                         <View style={styles.imageContainer}>
-                                            <Image 
-                                                source={{ uri: clinicDocs.ss3_license_url }} 
-                                                style={styles.docPreviewImage} 
-                                                resizeMode="cover"
-                                            />
-                                            <View style={styles.zoomIconOverlay}>
-                                                <Feather name="zoom-in" size={24} color="#FFF" />
-                                            </View>
+                                            <Image source={{ uri: clinicDocs.ss3_license_url }} style={styles.docPreviewImage} resizeMode="cover" />
+                                            <View style={styles.zoomIconOverlay}><Feather name="zoom-in" size={24} color="#FFF" /></View>
                                         </View>
                                     </TouchableOpacity>
                                 ) : (
-                                    <View style={styles.docPlaceholder}>
-                                        <Text style={styles.docPlaceholderText}>ไม่พบรูปภาพเอกสาร</Text>
-                                    </View>
+                                    <View style={styles.docPlaceholder}><Text style={styles.docPlaceholderText}>ไม่พบรูปภาพเอกสาร</Text></View>
                                 )}
-                                <Text style={styles.docExpireText}>
-                                    หมดอายุ: <Text style={styles.docExpireBold}>{clinicDocs?.ss3_license_expired || 'ไม่ระบุ'}</Text>
-                                </Text>
                             </View>
 
                             <View style={styles.docSection}>
                                 <Text style={styles.docSectionTitle}>ใบอนุญาตดำเนินการสถานพยาบาลสัตว์ (ส.ส.๔)</Text>
                                 {clinicDocs?.ss4_license_url ? (
-                                    //  หุ้มรูปด้วย TouchableOpacity เพื่อกดซูมภาพ
-                                    <TouchableOpacity activeOpacity={0.8} onPress={() => setFullScreenImage(clinicDocs.ss4_license_url)}>
+                                    <TouchableOpacity activeOpacity={0.8} onPress={() => openFullScreenImage(clinicDocs.ss4_license_url)}>
                                         <View style={styles.imageContainer}>
-                                            <Image 
-                                                source={{ uri: clinicDocs.ss4_license_url }} 
-                                                style={styles.docPreviewImage} 
-                                                resizeMode="cover"
-                                            />
-                                            <View style={styles.zoomIconOverlay}>
-                                                <Feather name="zoom-in" size={24} color="#FFF" />
-                                            </View>
+                                            <Image source={{ uri: clinicDocs.ss4_license_url }} style={styles.docPreviewImage} resizeMode="cover" />
+                                            <View style={styles.zoomIconOverlay}><Feather name="zoom-in" size={24} color="#FFF" /></View>
                                         </View>
                                     </TouchableOpacity>
                                 ) : (
-                                    <View style={styles.docPlaceholder}>
-                                        <Text style={styles.docPlaceholderText}>ไม่พบรูปภาพเอกสาร</Text>
-                                    </View>
+                                    <View style={styles.docPlaceholder}><Text style={styles.docPlaceholderText}>ไม่พบรูปภาพเอกสาร</Text></View>
                                 )}
-                                <Text style={styles.docExpireText}>
-                                    หมดอายุ: <Text style={styles.docExpireBold}>{clinicDocs?.ss4_license_expired || 'ไม่ระบุ'}</Text>
-                                </Text>
                             </View>
-
                             <View style={{ height: 30 }} />
                         </ScrollView>
-
                     </View>
                 </View>
             </Modal>
 
-            {/*  Modal สำหรับแสดงรูปภาพเต็มจอ (Full Screen Zoom) */}
-            <Modal
-                visible={!!fullScreenImage}
-                transparent={true}
-                animationType="fade"
-                onRequestClose={() => setFullScreenImage(null)}
-            >
-                <View style={styles.fullScreenOverlay}>
-                    <TouchableOpacity 
-                        style={styles.fullScreenCloseBtn} 
-                        onPress={() => setFullScreenImage(null)}
-                    >
-                        <Feather name="x" size={28} color="#FFF" />
-                    </TouchableOpacity>
-                    
-                    {/* ScrollView จะทำให้รองรับการซูม (Pinch to zoom) บน iOS */}
-                    <ScrollView 
-                        contentContainerStyle={styles.fullScreenScroll}
-                        maximumZoomScale={3}
-                        minimumZoomScale={1}
-                        centerContent={true}
-                        showsHorizontalScrollIndicator={false}
-                        showsVerticalScrollIndicator={false}
-                    >
-                        {fullScreenImage && (
-                            <Image 
-                                source={{ uri: fullScreenImage }}
-                                style={styles.fullScreenImage}
-                                resizeMode="contain"
-                            />
-                        )}
-                    </ScrollView>
-                </View>
-            </Modal>
+            <ImageView
+                images={viewerImages}
+                imageIndex={0}
+                visible={isViewerVisible}
+                onRequestClose={() => setIsViewerVisible(false)}
+                swipeToCloseEnabled={true}
+            />
 
         </SafeAreaView>
     );
@@ -422,33 +422,22 @@ const styles = StyleSheet.create({
     mainTitle: { fontSize: 22, fontWeight: 'bold', color: '#9C27B0', marginBottom: 16 },
 
     switchModeContainer: { marginBottom: 20 },
-    switchModeBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F3E5F5',
-        borderRadius: 16,
-        padding: 16,
-        borderWidth: 1,
-        borderColor: '#E1BEE7',
-    },
-    switchIconBg: {
-        backgroundColor: '#9C27B0',
-        width: 48,
-        height: 48,
-        borderRadius: 24,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 16,
-    },
+    switchModeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3E5F5', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E1BEE7' },
+    switchIconBg: { backgroundColor: '#9C27B0', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
     switchTextContainer: { flex: 1 },
     switchModeTitle: { fontSize: 16, fontWeight: 'bold', color: '#9C27B0', marginBottom: 4 },
     switchModeSub: { fontSize: 12, color: '#7B1FA2' },
 
     profileCard: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EAEAEC', borderRadius: 16, padding: 16, marginBottom: 20, elevation: 1 },
-    editIconBtn: { position: 'absolute', top: 18, right: 18, zIndex: 10, padding: 4 },
 
-    profileTopRow: { flexDirection: 'row', marginBottom: 12, paddingRight: 32, alignItems: 'center' },
-    logoPlaceholder: { width: 75, height: 75, borderRadius: 16, backgroundColor: '#902BF5', marginRight: 16 }, 
+    profileTopRow: { flexDirection: 'row', marginBottom: 12, alignItems: 'center' },
+
+    logoContainer: { width: 75, height: 75, borderRadius: 16, marginRight: 16, position: 'relative', overflow: 'hidden', backgroundColor: '#902BF5' },
+    logoImage: { width: '100%', height: '100%', borderRadius: 16 },
+    logoPlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+    editBadgeIcon: { position: 'absolute', bottom: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+
     profileTopInfo: { flex: 1 },
     clinicTitleText: { fontSize: 18, fontWeight: 'bold', color: '#1A1A1A', lineHeight: 24 },
 
@@ -459,22 +448,13 @@ const styles = StyleSheet.create({
     badgeRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
     badgeGreenSmall: { backgroundColor: '#E8F5E9', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 4 },
     badgeGreenSmallText: { color: '#00C853', fontSize: 10, fontWeight: 'bold' },
-    
     badgePurpleSmall: { backgroundColor: '#F3E5F5', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, alignSelf: 'flex-start', marginBottom: 4 },
-    badgePurpleSmallText: { color: '#902BF5', fontSize: 10, fontWeight: 'bold' }, 
+    badgePurpleSmallText: { color: '#902BF5', fontSize: 10, fontWeight: 'bold' },
 
     infoSection: { marginTop: 4, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 16 },
     infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
     infoIcon: { width: 22, marginRight: 8 },
     infoText: { flex: 1, fontSize: 12, color: '#666', lineHeight: 18 },
-
-    editSection: { marginTop: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0', paddingTop: 16 },
-    editFieldContainer: { marginBottom: 12 },
-    editLabel: { fontSize: 13, fontWeight: 'bold', color: '#1A1A1A', marginBottom: 4 },
-    editInputRow: { flexDirection: 'row', alignItems: 'stretch' },
-    editInput: { flex: 1, borderWidth: 1, borderColor: '#666', borderTopLeftRadius: 8, borderBottomLeftRadius: 8, borderRightWidth: 0, paddingHorizontal: 12, height: 40, fontSize: 12, color: '#333' },
-    editInlineBtn: { backgroundColor: '#A21EEA', paddingHorizontal: 16, justifyContent: 'center', alignItems: 'center', borderTopRightRadius: 8, borderBottomRightRadius: 8 },
-    editInlineBtnText: { color: '#FFF', fontSize: 12, fontWeight: 'bold' },
 
     licenseCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EAEAEC', borderRadius: 12, padding: 16, marginBottom: 20 },
     licenseLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
@@ -487,7 +467,6 @@ const styles = StyleSheet.create({
     logoutBtn: { backgroundColor: '#FFF', borderWidth: 1, borderColor: '#FF3B30', borderRadius: 8, paddingVertical: 14, alignItems: 'center' },
     logoutBtnText: { color: '#FF3B30', fontSize: 14, fontWeight: 'bold' },
 
-    //  Styles สำหรับ Modal 
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, height: '85%', padding: 20 },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', paddingBottom: 15 },
@@ -497,25 +476,14 @@ const styles = StyleSheet.create({
 
     docSection: { marginBottom: 24, backgroundColor: '#FAFAFA', padding: 16, borderRadius: 12, borderWidth: 1, borderColor: '#EAEAEC' },
     docSectionTitle: { fontSize: 15, fontWeight: 'bold', color: '#9C27B0', marginBottom: 12 },
-    
     docRow: { flexDirection: 'row', marginBottom: 6 },
     docLabel: { width: 120, fontSize: 13, color: '#666' },
     docValue: { flex: 1, fontSize: 13, fontWeight: 'bold', color: '#333' },
 
-    //  Styles สำหรับรูปภาพที่กดดูได้
     imageContainer: { position: 'relative', width: '100%', height: 200, marginBottom: 12, borderRadius: 8, overflow: 'hidden' },
     docPreviewImage: { width: '100%', height: '100%', backgroundColor: '#EAEAEC' },
     zoomIconOverlay: { position: 'absolute', right: 10, bottom: 10, backgroundColor: 'rgba(0,0,0,0.5)', width: 36, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center' },
-    
-    docPlaceholder: { width: '100%', height: 200, backgroundColor: '#F5F5F5', borderRadius: 8, marginBottom: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EAEAEC', borderStyle: 'dashed' },
-    docPlaceholderText: { color: '#999', fontSize: 14 },
-    
-    docExpireText: { fontSize: 13, color: '#666', textAlign: 'center' },
-    docExpireBold: { fontWeight: 'bold', color: '#D32F2F' },
 
-    //  Styles สำหรับ Modal เต็มหน้าจอ
-    fullScreenOverlay: { flex: 1, backgroundColor: '#000' },
-    fullScreenCloseBtn: { position: 'absolute', top: Platform.OS === 'ios' ? 50 : 20, right: 20, zIndex: 10, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 },
-    fullScreenScroll: { flexGrow: 1, justifyContent: 'center', alignItems: 'center' },
-    fullScreenImage: { width: screenWidth, height: screenHeight * 0.8 },
+    docPlaceholder: { width: '100%', height: 200, backgroundColor: '#F5F5F5', borderRadius: 8, marginBottom: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#EAEAEC', borderStyle: 'dashed' },
+    docPlaceholderText: { color: '#999', fontSize: 14 }
 });

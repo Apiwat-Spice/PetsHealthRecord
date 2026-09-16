@@ -11,6 +11,7 @@ cloudinary.config({
 // 1. ฟังก์ชันสำหรับอัปโหลดเอกสารยืนยันตัวตนแพทย์
 // ==========================================
 exports.uploadVetLicense = async (req, res) => {
+    // (โค้ดส่วนนี้เหมือนเดิม ไม่มีการเปลี่ยนแปลง)
     try {
         const { vet_id, vet_license_expired, vet_id_card_expired, vet_class } = req.body;
         const files = req.files;
@@ -38,7 +39,6 @@ exports.uploadVetLicense = async (req, res) => {
             });
         };
 
-        //  ตรวจสอบว่าเคยมีรูปเก่าไหม ถ้ามีให้ลบทิ้งก่อน
         const { data: oldLicense } = await supabase
             .from('vet_license')
             .select('vet_license_pdf_public_id, vet_id_card_pdf_public_id')
@@ -105,6 +105,7 @@ exports.uploadVetLicense = async (req, res) => {
 // 2. ฟังก์ชันเช็กสถานะการยืนยันตัวตนของสัตวแพทย์
 // ==========================================
 exports.checkVetStatus = async (req, res) => {
+    // (โค้ดส่วนนี้เหมือนเดิม ไม่มีการเปลี่ยนแปลง)
     try {
         const vetId = req.params.vetId || req.params.userId;
         if (!vetId || vetId === 'undefined') return res.status(200).json({ status: 'unsubmitted' });
@@ -128,7 +129,7 @@ exports.checkVetStatus = async (req, res) => {
 
         const { data: vetData } = await supabase
             .from('vet')
-            .select('vet_class')
+            .select('vet_class, profile_image_url')
             .eq('vet_id', vetId)
             .single();
 
@@ -137,6 +138,8 @@ exports.checkVetStatus = async (req, res) => {
             return res.status(200).json({
                 status: latestDoc.status,
                 detail: latestDoc.detail,
+                // 🟢 แนบ URL รูปโปรไฟล์ส่งกลับไปให้แอป
+                profile_image_url: vetData?.profile_image_url,
                 submittedDocs: {
                     ...latestLicense,
                     vet_class: vetData?.vet_class
@@ -156,6 +159,7 @@ exports.checkVetStatus = async (req, res) => {
 // 3. ฟังก์ชันสำหรับสร้างคำขอเปิดสถานพยาบาล
 // ==========================================
 exports.createClinicRequest = async (req, res) => {
+    // (โค้ดส่วนนี้เหมือนเดิม ไม่มีการเปลี่ยนแปลง)
     try {
         const data = req.body;
         const files = req.files;
@@ -176,8 +180,8 @@ exports.createClinicRequest = async (req, res) => {
 
         const { data: oldClinicLicense } = await supabase.from('clinic_license').select('ss3_license_public_id, ss4_license_public_id').eq('vet_id', data.vet_id).single();
         if (oldClinicLicense) {
-            if (oldClinicLicense.ss3_license_public_id) await cloudinary.uploader.destroy(oldClinicLicense.ss3_license_public_id).catch(() => {});
-            if (oldClinicLicense.ss4_license_public_id) await cloudinary.uploader.destroy(oldClinicLicense.ss4_license_public_id).catch(() => {});
+            if (oldClinicLicense.ss3_license_public_id) await cloudinary.uploader.destroy(oldClinicLicense.ss3_license_public_id).catch(() => { });
+            if (oldClinicLicense.ss4_license_public_id) await cloudinary.uploader.destroy(oldClinicLicense.ss4_license_public_id).catch(() => { });
         }
 
         console.log("1. กำลังอัปโหลดเอกสารคลินิกขึ้น Cloud...");
@@ -186,7 +190,6 @@ exports.createClinicRequest = async (req, res) => {
 
         console.log("2. กำลังบันทึกข้อมูลลงฐานข้อมูล 4 ตาราง...");
 
-        // ตารางที่ 1: clinic_license
         const { data: clinicLicenseData, error: clinicLicenseError } = await supabase
             .from('clinic_license')
             .upsert({
@@ -203,7 +206,6 @@ exports.createClinicRequest = async (req, res) => {
 
         if (clinicLicenseError) throw clinicLicenseError;
 
-        // ตารางที่ 2: vetclinic_address
         const { data: addressData, error: addressError } = await supabase
             .from('vetclinic_address')
             .insert({
@@ -221,7 +223,6 @@ exports.createClinicRequest = async (req, res) => {
 
         if (addressError) throw addressError;
 
-        // ตารางที่ 3: vet_clinic_document
         const { data: documentData, error: documentError } = await supabase
             .from('vet_clinic_document')
             .insert({
@@ -234,14 +235,13 @@ exports.createClinicRequest = async (req, res) => {
 
         if (documentError) throw documentError;
 
-        //  ตารางที่ 4: vet_clinic (บันทึกชื่อ และ เวลาเปิดปิด)
         const { error: clinicError } = await supabase
             .from('vet_clinic')
             .insert({
                 vet_clinic_document_id: documentData.vet_clinic_document_id,
                 vet_clinic_name: data.clinicName,
-                vet_clinic_open: data.openTime, // e.g., '08:00:00'
-                vet_clinic_close: data.closeTime, // e.g., '20:00:00'
+                vet_clinic_open: data.openTime,
+                vet_clinic_close: data.closeTime,
                 vet_clinic_verified: false
             });
 
@@ -257,13 +257,13 @@ exports.createClinicRequest = async (req, res) => {
 };
 
 // ==========================================
-// 4. ฟังก์ชันเช็กสถานะคำขอสร้างสถานพยาบาล (และเช็กว่าเป็นพนักงานหรือไม่)
+// 4. ฟังก์ชันเช็กสถานะคำขอสร้างสถานพยาบาล 
 // ==========================================
 exports.checkClinicStatus = async (req, res) => {
     try {
         const vetId = req.params.vetId;
 
-        //  ส่วนที่ 1: ตรวจสอบว่าเป็น "เจ้าของสถานพยาบาล" หรือไม่? (จาก clinic_license)
+        // ส่วนที่ 1: เจ้าของสถานพยาบาล
         const { data: licenseData } = await supabase
             .from('clinic_license')
             .select('*')
@@ -283,7 +283,7 @@ exports.checkClinicStatus = async (req, res) => {
 
             if (docData && docData.length > 0) {
                 const latestDoc = docData[0];
-                
+
                 let addressData = null;
                 if (latestDoc.vetclinic_address_id) {
                     const { data: addrData } = await supabase.from('vetclinic_address').select('*').eq('vetclinic_address_id', latestDoc.vetclinic_address_id).single();
@@ -294,7 +294,8 @@ exports.checkClinicStatus = async (req, res) => {
                 if (latestDoc.vet_clinic_document_id) {
                     const { data: vClinicData } = await supabase
                         .from('vet_clinic')
-                        .select('vet_clinic_name, vet_clinic_open, vet_clinic_close')
+                        // เพิ่ม vet_clinic_image_url ในคำสั่ง Select
+                        .select('vet_clinic_name, vet_clinic_open, vet_clinic_close, vet_clinic_image_url')
                         .eq('vet_clinic_document_id', latestDoc.vet_clinic_document_id)
                         .single();
                     clinicInfo = vClinicData;
@@ -305,38 +306,39 @@ exports.checkClinicStatus = async (req, res) => {
                     operating_hours = `${clinicInfo.vet_clinic_open.slice(0, 5)} - ${clinicInfo.vet_clinic_close.slice(0, 5)}`;
                 }
 
-                //  คืนค่าข้อมูลสำหรับ "เจ้าของคลินิก" (owner)
-                return res.status(200).json({ 
-                    status: latestDoc.status, 
+                return res.status(200).json({
+                    status: latestDoc.status,
                     detail: latestDoc.detail,
-                    role: 'owner', // <-- ระบุ Role ว่าเป็นเจ้าของ
+                    role: 'owner',
                     submittedDocs: {
                         ...latestLicense,
-                        clinic_name: clinicInfo?.vet_clinic_name || '-', 
-                        operating_hours: operating_hours, 
-                        address: addressData 
-                    } 
+                        clinic_name: clinicInfo?.vet_clinic_name || '-',
+                        operating_hours: operating_hours,
+                        address: addressData,
+                        // ส่งรูปโลโก้กลับไปให้แอป
+                        vet_clinic_image_url: clinicInfo?.vet_clinic_image_url
+                    }
                 });
             }
         }
 
-        //  ส่วนที่ 2: ถ้าไม่ใช่เจ้าของ ให้ไปตรวจว่าเป็น "สัตวแพทย์ประจำ (พนักงาน)" หรือไม่?
-        // ค้นหาในตาราง clinic_vet_staff
+        // ส่วนที่ 2: สัตวแพทย์ประจำ (พนักงาน)
         const { data: staffData } = await supabase
             .from('clinic_vet_staff')
             .select('vet_clinic_id, status')
             .eq('vet_id', vetId)
-            .eq('status', 'active') // เอาเฉพาะคนที่สถานะยัง Active อยู่
+            .eq('status', 'active')
             .single();
 
         if (staffData) {
-            // ถ้าเจอว่าเป็นพนักงาน ให้ไปดึงข้อมูลคลินิกที่เขาสังกัดมาโชว์
             const { data: clinicData } = await supabase
                 .from('vet_clinic')
+                // เพิ่ม vet_clinic_image_url ในคำสั่ง Select ด้วย
                 .select(`
                     vet_clinic_name, 
                     vet_clinic_open, 
                     vet_clinic_close,
+                    vet_clinic_image_url,
                     vet_clinic_document (
                         vetclinic_address_id
                     )
@@ -344,15 +346,14 @@ exports.checkClinicStatus = async (req, res) => {
                 .eq('vet_clinic_id', staffData.vet_clinic_id)
                 .single();
 
-            // ดึงที่อยู่ของคลินิก (ถ้ามี)
             let addressData = null;
             if (clinicData?.vet_clinic_document?.vetclinic_address_id) {
-                 const { data: addrData } = await supabase
+                const { data: addrData } = await supabase
                     .from('vetclinic_address')
                     .select('*')
                     .eq('vetclinic_address_id', clinicData.vet_clinic_document.vetclinic_address_id)
                     .single();
-                 addressData = addrData;
+                addressData = addrData;
             }
 
             let operating_hours = '-';
@@ -360,25 +361,195 @@ exports.checkClinicStatus = async (req, res) => {
                 operating_hours = `${clinicData.vet_clinic_open.slice(0, 5)} - ${clinicData.vet_clinic_close.slice(0, 5)}`;
             }
 
-            //  คืนค่าข้อมูลสำหรับ "พนักงาน" (staff)
-            // ให้สถานะเป็น 'pass' เพื่อให้แอปโชว์ Badge สีม่วงได้
             return res.status(200).json({
                 status: 'pass',
                 detail: '',
-                role: 'staff', // <-- ระบุ Role ว่าเป็นพนักงาน
+                role: 'staff',
                 submittedDocs: {
                     clinic_name: clinicData?.vet_clinic_name || '-',
                     operating_hours: operating_hours,
-                    address: addressData
+                    address: addressData,
+                    // ส่งรูปโลโก้กลับไปให้แอป
+                    vet_clinic_image_url: clinicData?.vet_clinic_image_url
                 }
             });
         }
 
-        //  ส่วนที่ 3: ถ้าไม่เจอทั้งในฐานะเจ้าของและพนักงาน
         return res.status(200).json({ status: 'unsubmitted' });
 
     } catch (error) {
         console.error("Check Clinic Error:", error);
         return res.status(500).json({ message: "เกิดข้อผิดพลาดในการตรวจสอบสถานะคลินิก" });
+    }
+};
+
+// ==========================================
+// 5. เพิ่มฟังก์ชันอัปโหลดรูปร้าน (เชื่อมกับ ProfileClinic.js)
+// ==========================================
+exports.uploadClinicLogo = async (req, res) => {
+    try {
+        console.log("==== 📥 [API] เริ่มอัปโหลดรูปสถานพยาบาล ====");
+        const { vet_id } = req.body;
+        const files = req.files;
+
+        console.log("📝 vet_id ที่ได้รับ:", vet_id);
+
+        if (!files || !files.clinic_logo) {
+            console.log("❌ ไม่พบไฟล์รูปภาพที่ส่งมา");
+            return res.status(400).json({ message: "กรุณาอัปโหลดรูปภาพสถานพยาบาล" });
+        }
+
+        console.log("1️⃣ กำลังค้นหาข้อมูล clinic_license...");
+        //  แก้จาก .single() เป็น .order().limit(1)
+        const { data: licenseData, error: err1 } = await supabase
+            .from('clinic_license')
+            .select('clinic_license_id')
+            .eq('vet_id', vet_id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (err1 || !licenseData || licenseData.length === 0) {
+            console.log("❌ ไม่พบสิทธิ์ความเป็นเจ้าของ:", err1);
+            return res.status(403).json({ message: "ไม่พบสิทธิ์การเป็นเจ้าของสถานพยาบาล" });
+        }
+        const clinicLicense = licenseData[0]; // หยิบแถวแรกมาใช้
+
+        console.log("2️⃣ กำลังค้นหาข้อมูล vet_clinic_document...");
+        //  แก้จาก .single() เป็น .order().limit(1) ป้องกัน Error กรณีมี 2 แถว
+        const { data: docDataArray, error: err2 } = await supabase
+            .from('vet_clinic_document')
+            .select('vet_clinic_document_id')
+            .eq('clinic_license_id', clinicLicense.clinic_license_id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (err2 || !docDataArray || docDataArray.length === 0) {
+            console.log("❌ ไม่พบข้อมูลเอกสารคลินิก:", err2);
+            return res.status(404).json({ message: "ไม่พบข้อมูลการเปิดคลินิกในระบบ" });
+        }
+        const docData = docDataArray[0];
+
+        console.log("3️⃣ กำลังค้นหาข้อมูล vet_clinic...");
+        //  แก้จาก .single() เป็น .order().limit(1)
+        const { data: clinicArray, error: err3 } = await supabase
+            .from('vet_clinic')
+            .select('vet_clinic_id, vet_clinic_image_public_id')
+            .eq('vet_clinic_document_id', docData.vet_clinic_document_id)
+            .order('created_at', { ascending: false })
+            .limit(1);
+
+        if (err3 || !clinicArray || clinicArray.length === 0) {
+            console.log("❌ ไม่พบข้อมูลสถานพยาบาล:", err3);
+            return res.status(404).json({ message: "ไม่พบข้อมูลสถานพยาบาลในระบบ" });
+        }
+        const clinic = clinicArray[0];
+
+        console.log("4️⃣ กำลังตรวจสอบรูปภาพเก่า...");
+        // เช็กว่าในฐานข้อมูลมี ID รูปเก่าอยู่หรือไม่
+        if (clinic.vet_clinic_image_public_id) {
+            console.log("🗑️ กำลังลบรูปเก่าบน Cloudinary ID:", clinic.vet_clinic_image_public_id);
+            // สั่งลบรูปเก่าบน Cloudinary ออกทันที
+            await cloudinary.uploader.destroy(clinic.vet_clinic_image_public_id).catch((e) => console.log("⚠️ ลบรูปเก่าไม่สำเร็จ:", e));
+        }
+
+        console.log("5️⃣ กำลังอัปโหลดรูปใหม่ขึ้น Cloudinary...");
+        const uploadToCloudinary = (fileBuffer) => {
+            return new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { resource_type: "image", folder: "Clinic/ClinicProfile", format: "jpg" },
+                    (error, result) => { if (error) reject(error); else resolve(result); }
+                );
+                stream.end(fileBuffer);
+            });
+        };
+
+        const result = await uploadToCloudinary(files.clinic_logo[0].buffer);
+        console.log("✅ อัปโหลด Cloudinary สำเร็จ! URL:", result.secure_url);
+
+        console.log("6️⃣ กำลังอัปเดต URL ลงฐานข้อมูล...");
+        const { error: updateError } = await supabase
+            .from('vet_clinic')
+            .update({
+                vet_clinic_image_url: result.secure_url,
+                vet_clinic_image_public_id: result.public_id
+            })
+            .eq('vet_clinic_id', clinic.vet_clinic_id);
+
+        if (updateError) {
+            console.log("❌ อัปเดตฐานข้อมูลไม่สำเร็จ:", updateError);
+            throw updateError;
+        }
+
+        console.log("🎉 อัปโหลดรูปภาพเสร็จสมบูรณ์!");
+        return res.status(200).json({
+            message: "อัปโหลดรูปภาพสถานพยาบาลสำเร็จ",
+            logo_url: result.secure_url
+        });
+
+    } catch (error) {
+        console.error("🚨 Upload Clinic Image Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ" });
+    }
+};
+// ==========================================
+// 6. เพิ่มฟังก์ชันอัปโหลดรูปโปรไฟล์สัตวแพทย์
+// ==========================================
+exports.uploadVetProfile = async (req, res) => {
+    try {
+        const { vet_id } = req.body;
+        const files = req.files;
+
+        if (!files || !files.profile_image) {
+            return res.status(400).json({ message: "กรุณาอัปโหลดรูปภาพโปรไฟล์" });
+        }
+
+        // 1. ดึงข้อมูลว่าสัตวแพทย์คนนี้มีรูปเก่าอยู่หรือไม่
+        const { data: vetData, error: findError } = await supabase
+            .from('vet')
+            .select('vet_id, profile_image_public_id')
+            .eq('vet_id', vet_id)
+            .single();
+
+        if (findError || !vetData) {
+            return res.status(404).json({ message: "ไม่พบข้อมูลสัตวแพทย์ในระบบ" });
+        }
+
+        // 2. ลบรูปเก่าบน Cloudinary (ถ้ามี)
+        if (vetData.profile_image_public_id) {
+            await cloudinary.uploader.destroy(vetData.profile_image_public_id).catch(() => {});
+        }
+
+        // 3. อัปโหลดรูปใหม่ขึ้น Cloudinary ในโฟลเดอร์ Vet/VetProfile
+        const uploadToCloudinary = (fileBuffer) => {
+            return new Promise((resolve, reject) => {
+                const stream = cloudinary.uploader.upload_stream(
+                    { resource_type: "image", folder: "Vet/VetProfile", format: "jpg" },
+                    (error, result) => { if (error) reject(error); else resolve(result); }
+                );
+                stream.end(fileBuffer);
+            });
+        };
+
+        const result = await uploadToCloudinary(files.profile_image[0].buffer);
+
+        // 4. บันทึก URL ลง Database ตาราง vet
+        const { error: updateError } = await supabase
+            .from('vet')
+            .update({
+                profile_image_url: result.secure_url,
+                profile_image_public_id: result.public_id
+            })
+            .eq('vet_id', vetData.vet_id);
+
+        if (updateError) throw updateError;
+
+        return res.status(200).json({ 
+            message: "อัปโหลดรูปโปรไฟล์สำเร็จ",
+            profile_image_url: result.secure_url 
+        });
+
+    } catch (error) {
+        console.error("Upload Vet Profile Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ" });
     }
 };

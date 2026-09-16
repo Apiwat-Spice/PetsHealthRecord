@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react'; // 🟢 1. Import useCallback
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, StatusBar, Platform, Alert, RefreshControl } from 'react-native'; // 🟢 2. Import RefreshControl
+import React, { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, StatusBar, Platform, Alert, RefreshControl, Image, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { useNavigation } from '@react-navigation/native';
+import * as DocumentPicker from 'expo-document-picker'; // 🟢 Import DocumentPicker
 
 import { API_URL } from '../../config';
 import Verify from './Verify';
@@ -34,12 +35,14 @@ export default function ProfileVET({ setIsLoggedIn }) {
   const [clinicName, setClinicName] = useState('กำลังโหลด...');
   const [clinicRole, setClinicRole] = useState('');
 
-  // 🟢 3. State สำหรับจัดการสถานะการ Refresh
   const [refreshing, setRefreshing] = useState(false);
+
+  // 🟢 State สำหรับรูปโปรไฟล์สัตวแพทย์
+  const [profileImage, setProfileImage] = useState(null);
+  const [isUploadingProfile, setIsUploadingProfile] = useState(false);
 
   const isFullyVerified = verificationStatus === 'pass' && clinicStatus === 'pass';
 
-  // 🟢 4. แยกฟังก์ชันดึงข้อมูลออกมา เพื่อให้เรียกใช้ได้ทั้งตอนเข้าหน้าเว็บและตอน Pull-to-refresh
   const loadProfile = async () => {
     try {
       const profileStr = await SecureStore.getItemAsync('vet_profile');
@@ -58,7 +61,7 @@ export default function ProfileVET({ setIsLoggedIn }) {
           roleLevel: profile.vet_class ? `สัตวแพทย์ชั้น ${profile.vet_class}` : 'สัตวแพทย์',
         });
 
-        // ดึงสถานะยืนยันตัวตน
+        // ดึงสถานะยืนยันตัวตน และรูปโปรไฟล์
         try {
           const response = await fetch(`${API_URL}/check-vet-status/${profile.vet_id}`);
           const data = await response.json();
@@ -66,6 +69,11 @@ export default function ProfileVET({ setIsLoggedIn }) {
             setVerificationStatus(data.status);
             setVerificationDetail(data.detail || '');
             setSubmittedDocs(data.submittedDocs || null);
+
+            // 🟢 เซ็ตรูปโปรไฟล์ที่ดึงมาจากฐานข้อมูล
+            if (data.profile_image_url) {
+              setProfileImage(data.profile_image_url);
+            }
           } else {
             setVerificationStatus('unsubmitted');
             setSubmittedDocs(null);
@@ -113,13 +121,62 @@ export default function ProfileVET({ setIsLoggedIn }) {
     loadProfile();
   }, []);
 
-  // 🟢 5. ฟังก์ชันเมื่อผู้ใช้ลากหน้าจอลงมา
   const onRefresh = useCallback(() => {
-    setRefreshing(true); // แสดงไอคอนหมุนๆ
+    setRefreshing(true);
     loadProfile().then(() => {
-      setRefreshing(false); // ซ่อนไอคอนเมื่อโหลดเสร็จ
+      setRefreshing(false);
     });
   }, []);
+
+  // 🟢 ฟังก์ชันสำหรับอัปโหลดรูปโปรไฟล์ (ใช้เทคนิค Blob เหมือนโลโก้คลินิก)
+  const handlePickAndUploadProfile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/jpeg', 'image/png'],
+        copyToCacheDirectory: true,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const file = result.assets[0];
+
+        setIsUploadingProfile(true);
+        const formData = new FormData();
+
+        formData.append('vet_id', String(vetProfile.vet_id));
+
+        // แปลงเป็น Blob
+        const fileResponse = await fetch(file.uri);
+        const blob = await fileResponse.blob();
+        formData.append('profile_image', blob, file.name || 'profile.jpg');
+
+        const response = await fetch(`${API_URL}/upload-vet-profile`, {
+          method: 'POST',
+          body: formData,
+          headers: { 'Accept': 'application/json' },
+        });
+
+        const resultText = await response.text();
+        let resultData;
+        try {
+          resultData = JSON.parse(resultText);
+        } catch (e) {
+          throw new Error("เซิร์ฟเวอร์ตอบกลับผิดพลาด: " + resultText);
+        }
+
+        if (response.ok) {
+          setProfileImage(resultData.profile_image_url);
+          Alert.alert("สำเร็จ", "อัปเดตรูปโปรไฟล์เรียบร้อยแล้ว");
+        } else {
+          Alert.alert("ข้อผิดพลาด", resultData.message || "ไม่สามารถอัปโหลดรูปภาพได้");
+        }
+      }
+    } catch (err) {
+      console.error("🚨 Upload Profile Error:", err);
+      Alert.alert("ข้อผิดพลาด", "เกิดปัญหาในการอัปโหลดรูปภาพ");
+    } finally {
+      setIsUploadingProfile(false);
+    }
+  };
 
   const handleLogout = () => {
     Alert.alert("ออกจากระบบ", "คุณต้องการออกจากระบบหรือไม่?", [
@@ -145,7 +202,7 @@ export default function ProfileVET({ setIsLoggedIn }) {
   };
 
   const switchToClinicMode = () => {
-    navigation.navigate("ClinicNav");
+    navigation.navigate("ClinicNav", { screen: "Clinic" });
   };
 
   return (
@@ -160,18 +217,33 @@ export default function ProfileVET({ setIsLoggedIn }) {
       <ScrollView
         style={styles.scrollView}
         showsVerticalScrollIndicator={false}
-        // 🟢 6. แนบ RefreshControl เข้าไปใน ScrollView
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#00B862']} // สีของวงกลมหมุนๆ (Android)
-            tintColor="#00B862"   // สีของวงกลมหมุนๆ (iOS)
-          />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#00B862']} tintColor="#00B862" />}
       >
         <View style={styles.profileHeaderCard}>
-          <View style={styles.avatarCircle}><Feather name="user" size={42} color="#1A1A1A" /></View>
+
+          {/* 🟢 ส่วนรูปโปรไฟล์ที่กดเปลี่ยนได้ */}
+          <TouchableOpacity
+            style={styles.avatarCircle}
+            onPress={handlePickAndUploadProfile}
+            disabled={isUploadingProfile}
+          >
+            {profileImage ? (
+              <Image source={{ uri: profileImage }} style={styles.avatarImage} />
+            ) : (
+              <Feather name="user" size={42} color="#1A1A1A" />
+            )}
+
+            {isUploadingProfile && (
+              <View style={styles.uploadingOverlay}>
+                <ActivityIndicator size="small" color="#00B862" />
+              </View>
+            )}
+
+            <View style={styles.editBadgeIcon}>
+              <Feather name="camera" size={12} color="#FFF" />
+            </View>
+          </TouchableOpacity>
+
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{vetProfile.name}</Text>
             <Text style={styles.profileEmail}>{vetProfile.email}</Text>
@@ -287,7 +359,13 @@ const styles = StyleSheet.create({
   vetNameText: { color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
   scrollView: { flex: 1 },
   profileHeaderCard: { backgroundColor: '#FFFFFF', flexDirection: 'row', padding: 20, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#EAEAEC' },
-  avatarCircle: { width: 70, height: 70, borderRadius: 35, borderWidth: 3, borderColor: '#1A1A1A', alignItems: 'center', justifyContent: 'center', marginRight: 16 },
+
+  // 🟢 ปรับ Style ของโปรไฟล์
+  avatarCircle: { width: 75, height: 75, borderRadius: 37.5, borderWidth: 2, borderColor: '#00B862', alignItems: 'center', justifyContent: 'center', marginRight: 16, position: 'relative', overflow: 'hidden', backgroundColor: '#F0F0F0' },
+  avatarImage: { width: '100%', height: '100%', borderRadius: 37.5 },
+  uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  editBadgeIcon: { position: 'absolute', bottom: 0, width: '100%', height: 20, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+
   profileInfo: { flex: 1 },
   profileName: { fontSize: 20, fontWeight: 'bold', color: '#1A1A1A', marginBottom: 2 },
   profileEmail: { fontSize: 12, color: '#888', marginBottom: 8 },
@@ -300,24 +378,8 @@ const styles = StyleSheet.create({
   badgePurpleText: { color: '#9C64A6', fontSize: 10, fontWeight: 'bold' },
 
   switchModeContainer: { paddingHorizontal: 16, marginTop: 20 },
-  switchModeBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#E3F2FD',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#90CAF9',
-  },
-  switchIconBg: {
-    backgroundColor: '#0055B3',
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
+  switchModeBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#E3F2FD', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#90CAF9' },
+  switchIconBg: { backgroundColor: '#0055B3', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center', marginRight: 16 },
   switchTextContainer: { flex: 1 },
   switchModeTitle: { fontSize: 16, fontWeight: 'bold', color: '#0055B3', marginBottom: 4 },
   switchModeSub: { fontSize: 12, color: '#5A7584' },
