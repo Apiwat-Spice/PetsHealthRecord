@@ -1,5 +1,6 @@
 const supabase = require("../config/supabase");
 const cloudinary = require("cloudinary").v2;
+const bcrypt = require("bcrypt");
 
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -294,8 +295,8 @@ exports.checkClinicStatus = async (req, res) => {
                 if (latestDoc.vet_clinic_document_id) {
                     const { data: vClinicData } = await supabase
                         .from('vet_clinic')
-                        // เพิ่ม vet_clinic_image_url ในคำสั่ง Select
-                        .select('vet_clinic_name, vet_clinic_open, vet_clinic_close, vet_clinic_image_url')
+                        // 🟢 เพิ่ม vet_clinic_id เพื่อให้แอปนำไปใช้ผูกกับข้อมูลพนักงานได้
+                        .select('vet_clinic_id, vet_clinic_name, vet_clinic_open, vet_clinic_close, vet_clinic_image_url')
                         .eq('vet_clinic_document_id', latestDoc.vet_clinic_document_id)
                         .single();
                     clinicInfo = vClinicData;
@@ -316,7 +317,9 @@ exports.checkClinicStatus = async (req, res) => {
                         operating_hours: operating_hours,
                         address: addressData,
                         // ส่งรูปโลโก้กลับไปให้แอป
-                        vet_clinic_image_url: clinicInfo?.vet_clinic_image_url
+                        vet_clinic_image_url: clinicInfo?.vet_clinic_image_url,
+                        // 🟢 ส่ง vet_clinic_id กลับไปให้แอป (ใช้ตอนสร้างบัญชีพนักงาน)
+                        vet_clinic_id: clinicInfo?.vet_clinic_id
                     }
                 });
             }
@@ -370,7 +373,9 @@ exports.checkClinicStatus = async (req, res) => {
                     operating_hours: operating_hours,
                     address: addressData,
                     // ส่งรูปโลโก้กลับไปให้แอป
-                    vet_clinic_image_url: clinicData?.vet_clinic_image_url
+                    vet_clinic_image_url: clinicData?.vet_clinic_image_url,
+                    // 🟢 ส่ง vet_clinic_id กลับไปให้แอป (ใช้ตอนสร้างบัญชีพนักงาน)
+                    vet_clinic_id: staffData.vet_clinic_id
                 }
             });
         }
@@ -516,7 +521,7 @@ exports.uploadVetProfile = async (req, res) => {
 
         // 2. ลบรูปเก่าบน Cloudinary (ถ้ามี)
         if (vetData.profile_image_public_id) {
-            await cloudinary.uploader.destroy(vetData.profile_image_public_id).catch(() => {});
+            await cloudinary.uploader.destroy(vetData.profile_image_public_id).catch(() => { });
         }
 
         // 3. อัปโหลดรูปใหม่ขึ้น Cloudinary ในโฟลเดอร์ Vet/VetProfile
@@ -543,13 +548,184 @@ exports.uploadVetProfile = async (req, res) => {
 
         if (updateError) throw updateError;
 
-        return res.status(200).json({ 
+        return res.status(200).json({
             message: "อัปโหลดรูปโปรไฟล์สำเร็จ",
-            profile_image_url: result.secure_url 
+            profile_image_url: result.secure_url
         });
 
     } catch (error) {
         console.error("Upload Vet Profile Error:", error);
         return res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปโหลดรูปภาพ" });
+    }
+};
+
+// ==========================================
+// 7. สร้างบัญชีพนักงานคลินิก (Receptionist / Cashier)
+// ==========================================
+exports.createClinicStaff = async (req, res) => {
+    try {
+        const { vet_clinic_id, firstname, lastname, email, phone, role, password } = req.body;
+
+        if (!vet_clinic_id || !firstname || !lastname || !email || !role || !password) {
+            return res.status(400).json({ message: "กรุณากรอกข้อมูลให้ครบถ้วน" });
+        }
+
+        const allowedRoles = ['receptionist', 'cashier'];
+        if (!allowedRoles.includes(role)) {
+            return res.status(400).json({ message: "ตำแหน่งไม่ถูกต้อง กรุณาเลือก receptionist หรือ cashier" });
+        }
+
+        if (String(password).length < 6) {
+            return res.status(400).json({ message: "รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร" });
+        }
+
+        // ตรวจสอบว่าอีเมลนี้ถูกใช้ไปแล้วหรือยัง
+        const { data: existUser, error: existError } = await supabase
+            .from("users")
+            .select("user_id")
+            .eq("email", email)
+            .maybeSingle();
+
+        if (existError) return res.status(500).json({ message: existError.message });
+        if (existUser) return res.status(400).json({ message: "อีเมลนี้ถูกใช้งานแล้ว" });
+
+        // ตรวจสอบว่าสถานพยาบาลนี้มีอยู่จริง
+        const { data: clinicExists, error: clinicCheckError } = await supabase
+            .from("vet_clinic")
+            .select("vet_clinic_id")
+            .eq("vet_clinic_id", vet_clinic_id)
+            .maybeSingle();
+
+        if (clinicCheckError) return res.status(500).json({ message: clinicCheckError.message });
+        if (!clinicExists) return res.status(404).json({ message: "ไม่พบสถานพยาบาลนี้ในระบบ" });
+
+        const password_hash = await bcrypt.hash(password, 10);
+
+        // 1) สร้างบัญชีผู้ใช้ (role: clinic_staff, ยังไม่ยืนยันตัวตน)
+        const { data: userData, error: userError } = await supabase
+            .from("users")
+            .insert({
+                role: "clinic_staff",
+                email,
+                password_hash,
+                verified: false,
+                status: "active",
+            })
+            .select()
+            .single();
+
+        if (userError) return res.status(400).json({ message: userError.message });
+
+        // 2) สร้างข้อมูลพนักงานผูกกับคลินิก พร้อมตำแหน่งที่เลือก
+        const { data: staffData, error: staffError } = await supabase
+            .from("clinic_staff")
+            .insert({
+                user_id: userData.user_id,
+                vet_clinic_id,
+                firstname,
+                lastname,
+                phone: phone || null,
+                role,
+                status: "active",
+            })
+            .select()
+            .single();
+
+        if (staffError) {
+            // Rollback บัญชีผู้ใช้ที่เพิ่งสร้าง ถ้าสร้างข้อมูลพนักงานไม่สำเร็จ
+            await supabase.from("users").delete().eq("user_id", userData.user_id);
+            return res.status(400).json({ message: staffError.message });
+        }
+
+        console.log(`✅ สร้างบัญชีพนักงานสำเร็จ user_id: ${userData.user_id}, role: ${role}`);
+
+        return res.status(201).json({
+            message: "สร้างบัญชีพนักงานสำเร็จ ระบบจะส่ง OTP ยืนยันตัวตนให้ในการเข้าสู่ระบบครั้งแรก",
+            user_id: userData.user_id,
+            role: userData.role,
+            staff: staffData,
+        });
+
+    } catch (error) {
+        console.error("Create Clinic Staff Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการสร้างบัญชีพนักงาน" });
+    }
+};
+
+// ==========================================
+// 8. ดึงรายชื่อพนักงานของคลินิก
+// ==========================================
+exports.getClinicStaff = async (req, res) => {
+    try {
+        const vetClinicId = req.params.vetClinicId;
+        if (!vetClinicId || vetClinicId === 'undefined') return res.status(200).json({ staff: [] });
+
+        const { data, error } = await supabase
+            .from("clinic_staff")
+            .select("clinic_staff_permission_id, user_id, firstname, lastname, phone, role, status, created_at, users(email)")
+            .eq("vet_clinic_id", vetClinicId)
+            .eq("status", "active")
+            .order("created_at", { ascending: false });
+
+        if (error) return res.status(500).json({ message: error.message });
+
+        const staff = (data || []).map((s) => ({
+            staff_id: s.clinic_staff_permission_id,
+            user_id: s.user_id,
+            firstname: s.firstname,
+            lastname: s.lastname,
+            phone: s.phone,
+            role: s.role,
+            status: s.status,
+            email: s.users?.email || '',
+            created_at: s.created_at,
+        }));
+
+        return res.status(200).json({ staff });
+    } catch (error) {
+        console.error("Get Clinic Staff Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลพนักงาน" });
+    }
+};
+
+// ==========================================
+// 9. ลบ/ปิดใช้งานพนักงาน (Soft Delete) — ปิดกั้นการล็อกอินด้วย
+// ==========================================
+exports.updateClinicStaffStatus = async (req, res) => {
+    try {
+        const staffId = req.params.staffId;
+        const { status } = req.body;
+
+        if (!['active', 'inactive'].includes(status)) {
+            return res.status(400).json({ message: "สถานะไม่ถูกต้อง" });
+        }
+
+        const { data: staffRow, error: findError } = await supabase
+            .from("clinic_staff")
+            .select("user_id")
+            .eq("clinic_staff_permission_id", staffId)
+            .single();
+
+        if (findError || !staffRow) return res.status(404).json({ message: "ไม่พบพนักงานรายนี้" });
+
+        const { error: staffUpdateError } = await supabase
+            .from("clinic_staff")
+            .update({ status })
+            .eq("clinic_staff_permission_id", staffId);
+
+        if (staffUpdateError) return res.status(500).json({ message: staffUpdateError.message });
+
+        // ปิดกั้นการล็อกอินของบัญชีที่ถูกลบออกจากคลินิกด้วย
+        await supabase
+            .from("users")
+            .update({ status })
+            .eq("user_id", staffRow.user_id);
+
+        return res.status(200).json({
+            message: status === 'active' ? "เปิดใช้งานพนักงานแล้ว" : "ลบพนักงานออกจากคลินิกแล้ว"
+        });
+    } catch (error) {
+        console.error("Update Clinic Staff Status Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปเดตสถานะพนักงาน" });
     }
 };

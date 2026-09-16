@@ -72,7 +72,7 @@ exports.register = async (req, res) => {
       }
     } else if (dbRole === "vet") {
       const { error: vetError } = await supabase
-        .from("vet") 
+        .from("vet")
         .insert({
           user_id: userData.user_id,
           firstname,
@@ -155,6 +155,11 @@ exports.login = async (req, res) => {
       return res.status(401).json({ message: "รหัสผ่านไม่ถูกต้อง" });
     }
 
+    // 🟢 บัญชีที่ถูกระงับ/ลบออกจากคลินิก (เช่น พนักงานที่ถูกลบออก) ห้ามล็อกอิน
+    if (user.status === 'inactive') {
+      return res.status(403).json({ message: "บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลคลินิก" });
+    }
+
     // ถ้ายังไม่ได้ Verify
     if (!user.verified) {
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -199,6 +204,10 @@ exports.login = async (req, res) => {
     } else if (user.role === "vet") {
       const { data } = await supabase.from("vet").select("*").eq("user_id", user.user_id).maybeSingle();
       profileData = data;
+    } else if (user.role === "clinic_staff") {
+      // 🟢 ดึงข้อมูลพนักงานคลินิก (receptionist / cashier)
+      const { data } = await supabase.from("clinic_staff").select("*").eq("user_id", user.user_id).maybeSingle();
+      profileData = data;
     }
 
     return res.status(200).json({
@@ -209,7 +218,7 @@ exports.login = async (req, res) => {
         email: user.email,
         role: user.role,
       },
-      profile: profileData || null 
+      profile: profileData || null
     });
 
   } catch (err) {

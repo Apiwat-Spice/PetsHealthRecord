@@ -1,7 +1,19 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, StatusBar, Platform, Modal, Alert } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import { StyleSheet, Text, View, ScrollView, TouchableOpacity, TextInput, StatusBar, Platform, Modal, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
+import { useFocusEffect } from '@react-navigation/native';
+
+import { API_URL } from '../../config';
+
+const ROLE_OPTIONS = [
+    { value: 'receptionist', label: 'พนักงานต้อนรับ (Receptionist)' },
+    { value: 'cashier', label: 'แคชเชียร์ (Cashier)' },
+];
+const ROLE_LABELS = { receptionist: 'พนักงานต้อนรับ', cashier: 'แคชเชียร์' };
+
+const EMPTY_FORM = { firstname: '', lastname: '', email: '', phone: '', password: '' };
 
 export default function TeamClinic() {
     const clinicInfo = { clinicName: 'คลินิกรักษาสัตว์ HappyPet', role: 'ผู้ดูแล' };
@@ -9,11 +21,156 @@ export default function TeamClinic() {
     const [activeTab, setActiveTab] = useState('vet'); // 'vet', 'staff', 'request'
     const [addStaffModal, setAddStaffModal] = useState(false);
 
+    // ข้อมูลคลินิกของผู้ใช้ปัจจุบัน
+    const [vetClinicId, setVetClinicId] = useState(null);
+    const [isOwner, setIsOwner] = useState(false);
+    const [loadingClinic, setLoadingClinic] = useState(true);
+
+    // รายชื่อพนักงาน
+    const [staffList, setStaffList] = useState([]);
+    const [loadingStaff, setLoadingStaff] = useState(false);
+
+    // ฟอร์มสร้างพนักงาน
+    const [staffForm, setStaffForm] = useState({ ...EMPTY_FORM });
+    const [staffRole, setStaffRole] = useState('receptionist');
+    const [roleMenuOpen, setRoleMenuOpen] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
+
     // ตัวเลขแจ้งเตือนของแต่ละแท็บ
     const notificationCounts = {
         vet: 0,       // สัตวแพทย์
-        staff: 1,     // พนักงาน
-        request: 1,   // คำขอสมัคร
+        staff: 0,     // พนักงาน
+        request: 0,   // คำขอสมัคร
+    };
+
+    // ===== โหลดข้อมูลคลินิกของผู้ใช้ปัจจุบัน (vet_clinic_id) =====
+    const loadClinicInfo = useCallback(async () => {
+        setLoadingClinic(true);
+        try {
+            const profileStr = await SecureStore.getItemAsync('vet_profile');
+            if (!profileStr) {
+                setLoadingClinic(false);
+                return;
+            }
+            const profile = JSON.parse(profileStr);
+            const vetId = profile.vet_id;
+
+            const res = await fetch(`${API_URL}/check-clinic-status/${vetId}`);
+            const data = await res.json();
+            setLoadingClinic(false);
+
+            if (res.ok && data.status === 'pass' && data.submittedDocs?.vet_clinic_id) {
+                setVetClinicId(data.submittedDocs.vet_clinic_id);
+                setIsOwner(data.role === 'owner');
+                loadStaff(data.submittedDocs.vet_clinic_id);
+            }
+        } catch (error) {
+            setLoadingClinic(false);
+            console.log('โหลดข้อมูลคลินิกไม่สำเร็จ:', error.message);
+        }
+    }, []);
+
+    // ===== โหลดรายชื่อพนักงาน =====
+    const loadStaff = useCallback(async (clinicId) => {
+        if (!clinicId) return;
+        setLoadingStaff(true);
+        try {
+            const res = await fetch(`${API_URL}/clinic-staff/${clinicId}`);
+            const data = await res.json();
+            setLoadingStaff(false);
+            if (res.ok) setStaffList(data.staff || []);
+        } catch (error) {
+            setLoadingStaff(false);
+            console.log('โหลดรายชื่อพนักงานไม่สำเร็จ:', error.message);
+        }
+    }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            loadClinicInfo();
+        }, [loadClinicInfo])
+    );
+
+    // ===== สร้างบัญชีพนักงาน =====
+    const handleCreateStaff = async () => {
+        if (!vetClinicId) {
+            Alert.alert('ข้อผิดพลาด', 'ไม่พบข้อมูลสถานพยาบาลของคุณ');
+            return;
+        }
+        if (!staffForm.firstname.trim() || !staffForm.lastname.trim() || !staffForm.email.trim() || !staffForm.password.trim()) {
+            Alert.alert('แจ้งเตือน', 'กรุณากรอกข้อมูลให้ครบถ้วน');
+            return;
+        }
+        if (staffForm.password.length < 6) {
+            Alert.alert('แจ้งเตือน', 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+            return;
+        }
+
+        setSubmitting(true);
+        try {
+            const response = await fetch(`${API_URL}/create-clinic-staff`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    vet_clinic_id: vetClinicId,
+                    firstname: staffForm.firstname.trim(),
+                    lastname: staffForm.lastname.trim(),
+                    email: staffForm.email.trim(),
+                    phone: staffForm.phone.trim(),
+                    role: staffRole,
+                    password: staffForm.password,
+                }),
+            });
+            const result = await response.json();
+            setSubmitting(false);
+
+            if (!response.ok) {
+                Alert.alert('สร้างบัญชีไม่สำเร็จ', result.message || 'เกิดข้อผิดพลาด');
+                return;
+            }
+
+            Alert.alert('สำเร็จ', 'สร้างบัญชีพนักงานเรียบร้อยแล้ว พนักงานจะได้รับ OTP ยืนยันตัวตนเมื่อเข้าสู่ระบบครั้งแรก');
+            setAddStaffModal(false);
+            setStaffForm({ ...EMPTY_FORM });
+            setStaffRole('receptionist');
+            loadStaff(vetClinicId);
+        } catch (error) {
+            setSubmitting(false);
+            console.log('Create staff error:', error.message);
+            Alert.alert('เชื่อมต่อไม่สำเร็จ', 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้');
+        }
+    };
+
+    // ===== ลบ(ปิดใช้งาน)พนักงาน =====
+    const handleRemoveStaff = (staff) => {
+        Alert.alert(
+            'ยืนยันการลบ',
+            `ต้องการลบ ${staff.firstname} ${staff.lastname} ออกจากคลินิกหรือไม่?`,
+            [
+                { text: 'ยกเลิก', style: 'cancel' },
+                {
+                    text: 'ลบออก',
+                    style: 'destructive',
+                    onPress: async () => {
+                        try {
+                            const res = await fetch(`${API_URL}/clinic-staff/${staff.staff_id}/status`, {
+                                method: 'PATCH',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'inactive' }),
+                            });
+                            const result = await res.json();
+                            if (res.ok) {
+                                loadStaff(vetClinicId);
+                            } else {
+                                Alert.alert('ผิดพลาด', result.message || 'ลบไม่สำเร็จ');
+                            }
+                        } catch (error) {
+                            Alert.alert('เชื่อมต่อไม่สำเร็จ', 'ไม่สามารถติดต่อเซิร์ฟเวอร์ได้');
+                        }
+                    },
+                },
+            ]
+        );
     };
 
     const renderTopTabs = () => (
@@ -38,8 +195,8 @@ export default function TeamClinic() {
             >
                 <View style={styles.tabTextWrapper}>
                     <Text style={[styles.tabText, activeTab === 'staff' ? styles.tabTextActive : styles.tabTextInactive]}>พนักงาน</Text>
-                    {notificationCounts.staff > 0 && (
-                        <View style={styles.badgeRed}><Text style={styles.badgeRedText}>{notificationCounts.staff}</Text></View>
+                    {staffList.length > 0 && (
+                        <View style={styles.badgeRed}><Text style={styles.badgeRedText}>{staffList.length}</Text></View>
                     )}
                 </View>
             </TouchableOpacity>
@@ -63,7 +220,6 @@ export default function TeamClinic() {
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
             <StatusBar barStyle="light-content" backgroundColor="#9C27B0" />
 
-
             <View style={styles.headerBar}>
                 <View style={styles.headerLeft}>
                     <MaterialCommunityIcons name="domain" size={20} color="#FFFFFF" />
@@ -81,9 +237,7 @@ export default function TeamClinic() {
 
                         {renderTopTabs()}
 
-
                         {/* Tab สัตวแพทย์ */}
-
                         {activeTab === 'vet' && (
                             <View>
                                 <Text style={styles.subHeading}>สัตวแพทย์ที่ประจำคลินิก (สมัครเองหรือได้รับอนุมัติ)</Text>
@@ -108,28 +262,50 @@ export default function TeamClinic() {
                         {/* Tab พนักงาน */}
                         {activeTab === 'staff' && (
                             <View>
-                                <View style={styles.rowRight}>
-                                    <TouchableOpacity style={styles.blueAddBtn} onPress={() => setAddStaffModal(true)}>
-                                        <Feather name="plus" size={16} color="#FFF" style={{ marginRight: 6 }} />
-                                        <Text style={styles.blueAddBtnText}>เพิ่มพนักงาน</Text>
-                                    </TouchableOpacity>
-                                </View>
-
-                                <View style={styles.userCard}>
-                                    <View style={styles.userCardLeft}>
-                                        <View style={styles.avatarBlue}><Feather name="user" size={24} color="#1976D2" /></View>
-                                        <View>
-                                            <Text style={styles.userNameBlue}>คุณมานี รักงาน</Text>
-                                            <Text style={styles.userEmail}>XXX@gmail.com</Text>
-                                        </View>
+                                {isOwner && (
+                                    <View style={styles.rowRight}>
+                                        <TouchableOpacity style={styles.blueAddBtn} onPress={() => setAddStaffModal(true)}>
+                                            <Feather name="plus" size={16} color="#FFF" style={{ marginRight: 6 }} />
+                                            <Text style={styles.blueAddBtnText}>เพิ่มพนักงาน</Text>
+                                        </TouchableOpacity>
                                     </View>
-                                    <TouchableOpacity onPress={() => Alert.alert('ยืนยัน', 'ต้องการลบพนักงานรายนี้หรือไม่?')}>
-                                        <Text style={styles.removeText}>ลบออก</Text>
-                                    </TouchableOpacity>
-                                </View>
+                                )}
+
+                                {loadingClinic || loadingStaff ? (
+                                    <ActivityIndicator size="large" color="#9C27B0" style={{ marginTop: 30 }} />
+                                ) : !vetClinicId ? (
+                                    <View style={styles.emptyBox}>
+                                        <MaterialCommunityIcons name="domain-off" size={40} color="#D6C6DE" />
+                                        <Text style={styles.emptyText}>ยังไม่พบข้อมูลสถานพยาบาลของคุณ</Text>
+                                    </View>
+                                ) : staffList.length === 0 ? (
+                                    <View style={styles.emptyBox}>
+                                        <Feather name="users" size={40} color="#D6C6DE" />
+                                        <Text style={styles.emptyText}>ยังไม่มีพนักงานในคลินิก</Text>
+                                    </View>
+                                ) : (
+                                    staffList.map((staff) => (
+                                        <View key={staff.staff_id} style={styles.userCard}>
+                                            <View style={styles.userCardLeft}>
+                                                <View style={styles.avatarBlue}><Feather name="user" size={24} color="#1976D2" /></View>
+                                                <View>
+                                                    <Text style={styles.userNameBlue}>{staff.firstname} {staff.lastname}</Text>
+                                                    <Text style={styles.userEmail}>{staff.email}</Text>
+                                                    <View style={styles.badgeBlueSmall}>
+                                                        <Text style={styles.badgeBlueSmallText}>{ROLE_LABELS[staff.role] || staff.role}</Text>
+                                                    </View>
+                                                </View>
+                                            </View>
+                                            {isOwner && (
+                                                <TouchableOpacity onPress={() => handleRemoveStaff(staff)}>
+                                                    <Text style={styles.removeText}>ลบออก</Text>
+                                                </TouchableOpacity>
+                                            )}
+                                        </View>
+                                    ))
+                                )}
                             </View>
                         )}
-
 
                         {/* คำขอสมัคร */}
                         {activeTab === 'request' && (
@@ -168,7 +344,7 @@ export default function TeamClinic() {
                     <View style={styles.modalBox}>
                         <View style={styles.modalHeader}>
                             <Text style={styles.modalTitleBlue}>สร้างบัญชีของพนักงาน</Text>
-                            <TouchableOpacity onPress={() => setAddStaffModal(false)}>
+                            <TouchableOpacity onPress={() => { setAddStaffModal(false); setRoleMenuOpen(false); }}>
                                 <Feather name="x" size={24} color="#888" />
                             </TouchableOpacity>
                         </View>
@@ -177,34 +353,79 @@ export default function TeamClinic() {
                             <View style={styles.formRowTwoCol}>
                                 <View style={{ flex: 1, marginRight: 6 }}>
                                     <Text style={styles.inputLabel}>ชื่อ</Text>
-                                    <TextInput style={styles.textInputOutline} />
+                                    <TextInput
+                                        style={styles.textInputOutline}
+                                        value={staffForm.firstname}
+                                        onChangeText={(t) => setStaffForm({ ...staffForm, firstname: t })}
+                                    />
                                 </View>
                                 <View style={{ flex: 1, marginLeft: 6 }}>
                                     <Text style={styles.inputLabel}>นามสกุล</Text>
-                                    <TextInput style={styles.textInputOutline} />
+                                    <TextInput
+                                        style={styles.textInputOutline}
+                                        value={staffForm.lastname}
+                                        onChangeText={(t) => setStaffForm({ ...staffForm, lastname: t })}
+                                    />
                                 </View>
                             </View>
 
                             <Text style={styles.inputLabel}>อีเมล</Text>
-                            <TextInput style={styles.textInputOutline} keyboardType="email-address" />
+                            <TextInput
+                                style={styles.textInputOutline}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                value={staffForm.email}
+                                onChangeText={(t) => setStaffForm({ ...staffForm, email: t })}
+                            />
 
                             <Text style={styles.inputLabel}>เบอร์โทร</Text>
-                            <TextInput style={styles.textInputOutline} keyboardType="phone-pad" />
+                            <TextInput
+                                style={styles.textInputOutline}
+                                keyboardType="phone-pad"
+                                value={staffForm.phone}
+                                onChangeText={(t) => setStaffForm({ ...staffForm, phone: t })}
+                            />
 
                             <Text style={styles.inputLabel}>ตำแหน่ง</Text>
-                            <View style={styles.pickerOutline}>
-                                <Text style={{ color: '#333' }}>พนักงานต้อนรับ</Text>
-                                <Feather name="chevron-down" size={18} color="#333" />
-                            </View>
+                            <TouchableOpacity style={styles.pickerOutline} onPress={() => setRoleMenuOpen((v) => !v)} activeOpacity={0.7}>
+                                <Text style={{ color: '#333' }}>{ROLE_OPTIONS.find((r) => r.value === staffRole)?.label}</Text>
+                                <Feather name={roleMenuOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#333" />
+                            </TouchableOpacity>
+                            {roleMenuOpen && (
+                                <View style={styles.roleMenu}>
+                                    {ROLE_OPTIONS.map((opt) => (
+                                        <TouchableOpacity
+                                            key={opt.value}
+                                            style={styles.roleMenuItem}
+                                            onPress={() => { setStaffRole(opt.value); setRoleMenuOpen(false); }}
+                                        >
+                                            <Text style={[styles.roleMenuItemText, staffRole === opt.value && styles.roleMenuItemTextActive]}>
+                                                {opt.label}
+                                            </Text>
+                                            {staffRole === opt.value && <Feather name="check" size={16} color="#1976D2" />}
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            )}
 
                             <Text style={styles.inputLabel}>รหัสผ่านเริ่มต้น</Text>
-                            <TextInput style={styles.textInputOutline} secureTextEntry={true} />
+                            <TextInput
+                                style={styles.textInputOutline}
+                                secureTextEntry={true}
+                                value={staffForm.password}
+                                onChangeText={(t) => setStaffForm({ ...staffForm, password: t })}
+                            />
 
-                            <TouchableOpacity style={styles.blueSubmitBtn} onPress={() => {
-                                Alert.alert('สำเร็จ', 'สร้างบัญชีพนักงานเรียบร้อยแล้ว');
-                                setAddStaffModal(false);
-                            }}>
-                                <Text style={styles.blueSubmitText}>สร้างบัญชี</Text>
+                            <TouchableOpacity
+                                style={[styles.blueSubmitBtn, submitting && { opacity: 0.7 }]}
+                                onPress={handleCreateStaff}
+                                disabled={submitting}
+                            >
+                                {submitting ? (
+                                    <ActivityIndicator color="#FFF" />
+                                ) : (
+                                    <Text style={styles.blueSubmitText}>สร้างบัญชี</Text>
+                                )}
                             </TouchableOpacity>
                         </ScrollView>
                     </View>
@@ -246,7 +467,7 @@ const styles = StyleSheet.create({
     // User Cards
     userCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EAEAEC', borderRadius: 12, padding: 16, marginBottom: 12, elevation: 1 },
     userCardColumn: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#EAEAEC', borderRadius: 12, padding: 16, marginBottom: 12, elevation: 1 },
-    userCardLeft: { flexDirection: 'row', alignItems: 'center' },
+    userCardLeft: { flexDirection: 'row', alignItems: 'center', flex: 1 },
 
     avatarPurple: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#9C27B0', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
     avatarBlue: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: '#1976D2', alignItems: 'center', justifyContent: 'center', marginRight: 14 },
@@ -262,8 +483,13 @@ const styles = StyleSheet.create({
 
     badgeGreenSmall: { backgroundColor: '#E8F5E9', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, alignSelf: 'flex-start' },
     badgeGreenSmallText: { color: '#00C853', fontSize: 10, fontWeight: 'bold' },
+    badgeBlueSmall: { backgroundColor: '#E3F2FD', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10, alignSelf: 'flex-start', marginTop: 2 },
+    badgeBlueSmallText: { color: '#1976D2', fontSize: 10, fontWeight: 'bold' },
 
     removeText: { fontSize: 12, color: '#888', fontWeight: 'bold' },
+
+    emptyBox: { alignItems: 'center', paddingVertical: 36 },
+    emptyText: { fontSize: 13, color: '#9E8CA6', fontWeight: '600', marginTop: 10 },
 
     // Buttons
     rowRight: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 12 },
@@ -278,7 +504,7 @@ const styles = StyleSheet.create({
 
     // Modal (Create Staff)
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-    modalBox: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, maxHeight: '80%' },
+    modalBox: { width: '100%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, maxHeight: '85%' },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
     modalTitleBlue: { fontSize: 16, fontWeight: 'bold', color: '#1976D2' },
 
@@ -286,6 +512,11 @@ const styles = StyleSheet.create({
     inputLabel: { fontSize: 12, fontWeight: 'bold', color: '#333', marginTop: 12, marginBottom: 6 },
     textInputOutline: { borderWidth: 1, borderColor: '#D1D1D1', borderRadius: 8, height: 42, paddingHorizontal: 12, fontSize: 14 },
     pickerOutline: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderWidth: 1, borderColor: '#D1D1D1', borderRadius: 8, height: 42, paddingHorizontal: 12 },
+
+    roleMenu: { borderWidth: 1, borderColor: '#D1D1D1', borderRadius: 8, marginTop: 6, overflow: 'hidden' },
+    roleMenuItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+    roleMenuItemText: { fontSize: 13, color: '#333' },
+    roleMenuItemTextActive: { color: '#1976D2', fontWeight: 'bold' },
 
     blueSubmitBtn: { backgroundColor: '#1976D2', paddingVertical: 14, borderRadius: 8, alignItems: 'center', marginTop: 24, marginBottom: 10 },
     blueSubmitText: { color: '#FFFFFF', fontSize: 15, fontWeight: 'bold' },
