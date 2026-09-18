@@ -66,6 +66,9 @@ export default function Login({ navigation, onLoginSuccess }) {
       if (result.profile) {
         if (result.user.role === 'vet') {
           await SecureStore.setItemAsync("vet_profile", JSON.stringify(result.profile));
+        } else if (result.user.role === 'clinic_staff') {
+          // 🟢 บัญชีพนักงานคลินิก (receptionist / cashier)
+          await SecureStore.setItemAsync("clinic_staff_profile", JSON.stringify(result.profile));
         } else {
           await SecureStore.setItemAsync("pet_owners", JSON.stringify(result.profile));
         }

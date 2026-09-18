@@ -46,4 +46,12 @@ router.get('/check-vet-status/:userId', vetController.checkVetStatus);
 // ดึงข้อมูลสถานะคำขอคลินิก
 router.get('/check-clinic-status/:vetId', vetController.checkClinicStatus);
 
+// ==== จัดการพนักงานคลินิก (Receptionist / Cashier) =====
+// สร้างบัญชีพนักงานใหม่
+router.post('/create-clinic-staff', vetController.createClinicStaff);
+// ดึงรายชื่อพนักงานของคลินิก
+router.get('/clinic-staff/:vetClinicId', vetController.getClinicStaff);
+// ลบ/ปิดใช้งาน หรือเปิดใช้งานพนักงานอีกครั้ง
+router.patch('/clinic-staff/:staffId/status', vetController.updateClinicStaffStatus);
+
 module.exports = router;

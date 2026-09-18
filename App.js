@@ -14,12 +14,15 @@ import VetNavigator from "./src/screens/Vet/VetNavigator";
 import ClinicNavigator from "./src/screens/Clinic/ClinicNavigator";
 import PetOwnerTabs from "./src/navigation/PetOwnerTabs";
 
+//  อย่าลืม Import StaffNavigator ให้ตรงกับ Path ไฟล์ของคุณด้วยนะครับ
+import StaffNavigator from "./src/screens/Staff/StaffNavigator";
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [loading, setLoading] = useState(true);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState(null); //เพิ่ม State เก็บ Role
+  const [userRole, setUserRole] = useState(null); // เก็บ Role 
 
   useEffect(() => {
     const checkLogin = async () => {
@@ -59,25 +62,31 @@ export default function App() {
       <NavigationContainer>
         <Stack.Navigator screenOptions={{ headerShown: false }}>
           {isLoggedIn ? (
-            // ถ้าล็อกอินแล้ว เช็ก Role ว่าให้ไปหน้าไหน
+
+            //  เช็ก Role ว่าให้ไปหน้าไหน
             userRole === "vet" ? (
-              //  ฝั่งของสัตวแพทย์ (Vet) จะมี 2 Navigator ให้สลับไปมาได้
+              // 1. ฝั่งของสัตวแพทย์ (Vet / Owner) จะมี 2 Navigator ให้สลับไปมาได้
               <>
                 <Stack.Screen name="VetNavigator">
                   {(props) => <VetNavigator {...props} setIsLoggedIn={setIsLoggedIn} />}
                 </Stack.Screen>
 
-                {/*  เพิ่มหน้า ClinicNav เข้ามา เพื่อให้ ProfileVET กดกระโดดมาได้ */}
                 <Stack.Screen name="ClinicNav">
                   {(props) => <ClinicNavigator {...props} setIsLoggedIn={setIsLoggedIn} />}
                 </Stack.Screen>
               </>
+            ) : userRole === "clinic_staff" ? (
+              //  2. เคสที่เพิ่มใหม่: ฝั่งพนักงาน (Staff) 
+              <Stack.Screen name="StaffNavigator">
+                {(props) => <StaffNavigator {...props} setIsLoggedIn={setIsLoggedIn} />}
+              </Stack.Screen>
             ) : (
-              //  ฝั่งของเจ้าของสัตว์เลี้ยง (Pet Owner)
+              // 3. ฝั่งของเจ้าของสัตว์เลี้ยง (Pet Owner)
               <Stack.Screen name="PetOwnerTabs">
                 {(props) => <PetOwnerTabs {...props} setIsLoggedIn={setIsLoggedIn} />}
               </Stack.Screen>
             )
+
           ) : (
             // ถ้ายังไม่ล็อกอิน ให้แสดงหน้า Auth
             <>
