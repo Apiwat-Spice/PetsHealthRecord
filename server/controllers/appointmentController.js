@@ -1,216 +1,142 @@
 const supabase = require("../config/supabase");
 
-const ALLOWED_STATUS = ['pending', 'confirm', 'cancel', 'completed'];
-
-// ==========================================
-// 1. รายชื่อสัตวแพทย์ที่รับผิดชอบคลินิกนี้ (เจ้าของ + สัตวแพทย์ประจำ)
-//    ใช้เติม dropdown "เลือกหมอที่อยู่ในคลินิกรับผิดชอบ"
-// ==========================================
-exports.getClinicVets = async (req, res) => {
+// 1. สร้างการนัดหมาย (ไม่ต้องใช้ clinic_id แล้ว)
+exports.bookAppointment = async (req, res) => {
     try {
-        const vetClinicId = req.params.vetClinicId;
-        if (!vetClinicId || vetClinicId === 'undefined') return res.status(200).json({ vets: [] });
+        const { pet_id, appointment_date, appointment_time, type, title, detail, status } = req.body;
 
-        const vetIds = new Set();
+        const { data, error: insertError } = await supabase.from("appointments").insert([{
+            pet_id: pet_id,
+            appointment_date: appointment_date,
+            appointment_time: appointment_time,
+            type: type || 'Appointment',
+            title: title || 'Health Checkup',
+            detail: detail || '',
+            status: status || 'pending'
+        }]).select();
 
-        // 1) เจ้าของสถานพยาบาล
-        const { data: clinicRow } = await supabase
-            .from('vet_clinic')
-            .select('vet_clinic_document_id')
-            .eq('vet_clinic_id', vetClinicId)
-            .maybeSingle();
+        if (insertError) throw insertError;
 
-        if (clinicRow?.vet_clinic_document_id) {
-            const { data: docRow } = await supabase
-                .from('vet_clinic_document')
-                .select('clinic_license_id')
-                .eq('vet_clinic_document_id', clinicRow.vet_clinic_document_id)
-                .maybeSingle();
-
-            if (docRow?.clinic_license_id) {
-                const { data: licenseRow } = await supabase
-                    .from('clinic_license')
-                    .select('vet_id')
-                    .eq('clinic_license_id', docRow.clinic_license_id)
-                    .maybeSingle();
-                if (licenseRow?.vet_id) vetIds.add(licenseRow.vet_id);
-            }
-        }
-
-        // 2) สัตวแพทย์ประจำคลินิก (staff)
-        const { data: staffVets } = await supabase
-            .from('clinic_vet_staff')
-            .select('vet_id')
-            .eq('vet_clinic_id', vetClinicId)
-            .eq('status', 'active');
-
-        (staffVets || []).forEach((s) => vetIds.add(s.vet_id));
-
-        if (vetIds.size === 0) return res.status(200).json({ vets: [] });
-
-        const { data: vetsData, error } = await supabase
-            .from('vet')
-            .select('vet_id, firstname, lastname, vet_class')
-            .in('vet_id', Array.from(vetIds));
-
-        if (error) return res.status(500).json({ message: error.message });
-
-        return res.status(200).json({ vets: vetsData || [] });
+        return res.status(201).json({ message: "สร้างการนัดหมายสำเร็จ", data });
     } catch (error) {
-        console.error("Get Clinic Vets Error:", error);
-        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงรายชื่อสัตวแพทย์" });
+        console.error("Booking Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
     }
 };
 
-// ==========================================
-// 2. รายการนัดหมายทั้งหมดของคลินิก พร้อมข้อมูลสัตว์เลี้ยง/เจ้าของ/หมอ/พนักงาน
-// ==========================================
-exports.getClinicAppointments = async (req, res) => {
+// 2. ดึงประวัติการนัดหมายทั้งหมดของสัตว์เลี้ยง แล้วแปะชื่อคลินิกที่ล็อกไว้
+exports.getHistory = async (req, res) => {
     try {
-        const vetClinicId = req.params.vetClinicId;
-        if (!vetClinicId || vetClinicId === 'undefined') return res.status(200).json({ appointments: [] });
+        const { ownerId } = req.params;
+        if (!ownerId) return res.status(400).json({ message: "ไม่พบรหัสเจ้าของสัตว์เลี้ยง" });
 
+        const FIXED_CLINIC_ID = 2; // รหัสคลินิกที่ต้องการล็อกชื่อ
+
+        const { data: pets, error: petsError } = await supabase
+            .from("pets")
+            .select("pet_id")
+            .eq("pet_owner_id", ownerId);
+
+        if (petsError) throw petsError;
+        if (!pets || pets.length === 0) return res.status(200).json([]);
+
+        const petIds = pets.map(pet => pet.pet_id);
+
+        // ดึงข้อมูลการนัดหมายทั้งหมดของสัตว์เลี้ยงตัวนี้ (ไม่กรอง clinic_id)
         const { data: appointments, error } = await supabase
-            .from('appointment')
-            .select('*')
-            .eq('vet_clinic_id', vetClinicId)
-            .order('appointment_date', { ascending: true })
-            .order('appointment_time', { ascending: true });
+            .from("appointments")
+            .select("*, pets(pet_name, animal_type)")
+            .in("pet_id", petIds)
+            .order("appointment_date", { ascending: false })
+            .order("appointment_time", { ascending: false });
 
-        if (error) return res.status(500).json({ message: error.message });
-        if (!appointments || appointments.length === 0) return res.status(200).json({ appointments: [] });
+        if (error) throw error;
 
-        const petIds = [...new Set(appointments.map((a) => a.pet_id).filter(Boolean))];
-        const vetIds = [...new Set(appointments.map((a) => a.vet_id).filter(Boolean))];
-        const staffIds = [...new Set(appointments.map((a) => a.clinic_staff).filter(Boolean))];
+        // ดึงชื่อคลินิกที่ล็อกไว้ (เช่น คลินิก ID 2) มาเตรียมแปะ
+        const { data: clinicData } = await supabase
+            .from("clinics")
+            .select("clinic_name")
+            .eq("clinic_id", FIXED_CLINIC_ID)
+            .single();
 
-        const [petsRes, vetsRes, staffRes] = await Promise.all([
-            petIds.length ? supabase.from('pets').select('pet_id, pet_name, animal_type, pet_owners_id').in('pet_id', petIds) : { data: [] },
-            vetIds.length ? supabase.from('vet').select('vet_id, firstname, lastname').in('vet_id', vetIds) : { data: [] },
-            staffIds.length ? supabase.from('clinic_staff').select('clinic_staff_permission_id, firstname, lastname').in('clinic_staff_permission_id', staffIds) : { data: [] },
-        ]);
+        const clinicName = clinicData?.clinic_name || 'คลินิกรักษาสัตว์';
 
-        const pets = petsRes.data || [];
-        const vets = vetsRes.data || [];
-        const staffRows = staffRes.data || [];
+        // เติมชื่อคลินิกที่ล็อกไว้เข้าไปในทุก item ของประวัติที่ดึงมาได้
+        const enrichedData = appointments.map(item => ({
+            ...item,
+            clinics: { clinic_name: clinicName }
+        }));
 
-        const ownerIds = [...new Set(pets.map((p) => p.pet_owners_id).filter(Boolean))];
-        const { data: owners } = ownerIds.length
-            ? await supabase.from('pet_owners').select('pet_owners_id, firstname, lastname, phone').in('pet_owners_id', ownerIds)
-            : { data: [] };
-
-        const petMap = Object.fromEntries(pets.map((p) => [p.pet_id, p]));
-        const ownerMap = Object.fromEntries((owners || []).map((o) => [o.pet_owners_id, o]));
-        const vetMap = Object.fromEntries(vets.map((v) => [v.vet_id, v]));
-        const staffMap = Object.fromEntries(staffRows.map((s) => [s.clinic_staff_permission_id, s]));
-
-        const result = appointments.map((a) => {
-            const pet = petMap[a.pet_id];
-            const owner = pet ? ownerMap[pet.pet_owners_id] : null;
-            const vet = vetMap[a.vet_id];
-            const staff = staffMap[a.clinic_staff];
-            return {
-                ...a,
-                pet_name: pet?.pet_name || 'ไม่ระบุ',
-                animal_type: pet?.animal_type || '',
-                owner_name: owner ? `${owner.firstname || ''} ${owner.lastname || ''}`.trim() || 'ไม่ระบุ' : 'ไม่ระบุ',
-                owner_phone: owner?.phone || '',
-                vet_name: vet ? `${vet.firstname} ${vet.lastname}` : null,
-                staff_name: staff ? `${staff.firstname} ${staff.lastname}` : null,
-            };
-        });
-
-        return res.status(200).json({ appointments: result });
+        return res.status(200).json(enrichedData);
     } catch (error) {
-        console.error("Get Clinic Appointments Error:", error);
-        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย" });
+        console.error("Get History Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงประวัติ" });
     }
 };
 
-// ==========================================
-// 3. เปลี่ยนสถานะนัดหมาย (รับนัด / ปฏิเสธ / ยกเลิก / เสร็จสิ้น)
-//    ส่ง vet_id มาด้วยได้เพื่อมอบหมายหมอพร้อมกันในขั้นตอนเดียว
-// ==========================================
-exports.updateAppointmentStatus = async (req, res) => {
+// 3. ดึงรายละเอียดนัดหมายตาม ID พร้อมแปะชื่อคลินิกที่ล็อกไว้
+exports.getAppointmentById = async (req, res) => {
     try {
-        const appointmentId = req.params.appointmentId;
-        const { status, vet_id, clinic_staff } = req.body;
+        const { id } = req.params;
+        const FIXED_CLINIC_ID = 2; //รหัสคลินิกที่ล็อกไว้
 
-        if (!ALLOWED_STATUS.includes(status)) {
-            return res.status(400).json({ message: "สถานะไม่ถูกต้อง" });
-        }
-
-        const updatePayload = { status };
-        if (vet_id !== undefined) updatePayload.vet_id = vet_id || null;
-        if (clinic_staff !== undefined) updatePayload.clinic_staff = clinic_staff || null;
-
-        const { data, error } = await supabase
-            .from('appointment')
-            .update(updatePayload)
-            .eq('appointment_id', appointmentId)
-            .select()
+        const { data: appointment, error: appError } = await supabase
+            .from("appointments")
+            .select(`
+                *,
+                pets(pet_name, animal_type),
+                vets(first_name, last_name),
+                clinic_staff(first_name, last_name)
+            `)
+            .eq("appointment_id", id)
             .single();
 
-        if (error) return res.status(500).json({ message: error.message });
-        if (!data) return res.status(404).json({ message: "ไม่พบนัดหมายนี้" });
+        if (appError) throw appError;
+        if (!appointment) return res.status(404).json({ message: "ไม่พบข้อมูลการนัดหมายนี้" });
 
-        return res.status(200).json({ message: "อัปเดตสถานะนัดหมายสำเร็จ", appointment: data });
+        //ดึงชื่อคลินิกที่ล็อกไว้มาใส่เพิ่ม
+        const { data: clinicData } = await supabase
+            .from("clinics")
+            .select("clinic_name")
+            .eq("clinic_id", FIXED_CLINIC_ID)
+            .single();
+
+        appointment.clinics = { clinic_name: clinicData?.clinic_name || 'คลินิกรักษาสัตว์' };
+
+        return res.status(200).json(appointment);
     } catch (error) {
-        console.error("Update Appointment Status Error:", error);
-        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการอัปเดตนัดหมาย" });
+        console.error("Get Detail Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
     }
 };
+// ดึงรายการนัดหมายตามวันที่ เพื่อนำไปเช็กเวลาที่ไม่ว่าง
+exports.getAppointmentsByClinicAndDate = async (req, res) => {
+  try {
+    const { clinicId, date } = req.params;
+    const FIXED_CLINIC_ID = Number(clinicId) || 2;
 
-// ==========================================
-// 4. เลื่อนนัดหมาย (เปลี่ยนวัน/เวลา แล้วดึงกลับไปเป็นรออนุมัติ)
-// ==========================================
-exports.rescheduleAppointment = async (req, res) => {
-    try {
-        const appointmentId = req.params.appointmentId;
-        const { appointment_date, appointment_time } = req.body;
+    // 1. หา pet_id ทั้งหมดที่เป็นของเจ้าของ หรืออยู่ในระบบของคลินิกนี้ 
+    // (หากระบบใช้คลินิกเดียว สามารถดึงนัดหมายทั้งหมดในวันที่นั้นได้เลย)
+    const { data, error } = await supabase
+      .from("appointments")
+      .select(`
+        appointment_id,
+        appointment_date,
+        appointment_time,
+        status,
+        pets (
+          pet_id,
+          pet_owner_id
+        )
+      `)
+      .eq("appointment_date", date)
+      .in("status", ["pending", "confirmed"]); // เช็กทั้งที่รออนุมัติและยืนยันแล้ว
 
-        if (!appointment_date || !appointment_time) {
-            return res.status(400).json({ message: "กรุณาระบุวันและเวลานัดหมายใหม่" });
-        }
+    if (error) throw error;
 
-        const { data, error } = await supabase
-            .from('appointment')
-            .update({ appointment_date, appointment_time, status: 'pending' })
-            .eq('appointment_id', appointmentId)
-            .select()
-            .single();
-
-        if (error) return res.status(500).json({ message: error.message });
-        if (!data) return res.status(404).json({ message: "ไม่พบนัดหมายนี้" });
-
-        return res.status(200).json({ message: "เลื่อนนัดหมายสำเร็จ", appointment: data });
-    } catch (error) {
-        console.error("Reschedule Appointment Error:", error);
-        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการเลื่อนนัดหมาย" });
-    }
-};
-
-// ==========================================
-// 5. มอบหมาย/เปลี่ยนสัตวแพทย์ผู้รับผิดชอบ (แบบไม่เปลี่ยนสถานะ)
-// ==========================================
-exports.assignAppointmentVet = async (req, res) => {
-    try {
-        const appointmentId = req.params.appointmentId;
-        const { vet_id } = req.body;
-
-        const { data, error } = await supabase
-            .from('appointment')
-            .update({ vet_id: vet_id || null })
-            .eq('appointment_id', appointmentId)
-            .select()
-            .single();
-
-        if (error) return res.status(500).json({ message: error.message });
-        if (!data) return res.status(404).json({ message: "ไม่พบนัดหมายนี้" });
-
-        return res.status(200).json({ message: "มอบหมายสัตวแพทย์สำเร็จ", appointment: data });
-    } catch (error) {
-        console.error("Assign Appointment Vet Error:", error);
-        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการมอบหมายสัตวแพทย์" });
-    }
+    return res.status(200).json({ appointments: data || [] });
+  } catch (error) {
+    console.error("Get Appointments By Date Error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย" });
+  }
 };

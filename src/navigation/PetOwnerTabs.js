@@ -1,39 +1,15 @@
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 
 import DashboardPetOwner from "../screens/PetOwner/Dashboard";
 import Pets from "../screens/PetOwner/Pets";
 import ScanQr from "../screens/PetOwner/ScanQr";
-import Search from "../screens/PetOwner/Search";
+import ClinicScreen from "../screens/PetOwner/ClinicScreen";
 import Profile from "../screens/PetOwner/Profile";
-import PetDetail from "../screens/PetOwner/PetDetail";
-import AddPetScreen from "../screens/PetOwner/AddPetScreen";
 
 const Tab = createBottomTabNavigator();
-const Stack = createNativeStackNavigator();
-function PetOwnerStack() {
-  return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      <Stack.Screen
-        name="Pets"
-        component={Pets}
-      />
 
-      <Stack.Screen
-        name="AddPetScreen"
-        component={AddPetScreen}
-      />
-
-      <Stack.Screen
-        name="PetDetail"
-        component={PetDetail}
-      />
-    </Stack.Navigator>
-  );
-}
-
-export default function PetOwnerTabs({setIsLoggedIn}) {
+export default function PetOwnerTabs({ setIsLoggedIn }) {
   return (
     <Tab.Navigator
       screenOptions={{
@@ -52,8 +28,8 @@ export default function PetOwnerTabs({setIsLoggedIn}) {
       />
 
       <Tab.Screen
-        name="PetOwnerStack"
-        component={PetOwnerStack}
+        name="MyPets"
+        component={Pets}
         options={{
           tabBarIcon: ({ color, size }) => (
             <Feather name="heart" size={size} color={color} />
@@ -72,11 +48,11 @@ export default function PetOwnerTabs({setIsLoggedIn}) {
       />
 
       <Tab.Screen
-        name="Search"
-        component={Search}
+        name="Clinic"
+        component={ClinicScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Feather name="search" size={size} color={color} />
+            <Feather name="plus-square" size={size} color={color} />
           ),
         }}
       />
@@ -90,10 +66,7 @@ export default function PetOwnerTabs({setIsLoggedIn}) {
         }}
       >
         {(props) => (
-          <Profile
-            {...props}
-            setIsLoggedIn={setIsLoggedIn}
-          />
+          <Profile {...props} setIsLoggedIn={setIsLoggedIn} />
         )}
       </Tab.Screen>
     </Tab.Navigator>
