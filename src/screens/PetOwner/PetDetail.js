@@ -210,6 +210,7 @@ export default function PetDetail({ navigation, route }) {
             upcoming={upcoming}
             uploadingImage={uploadingImage}
             onPickImage={handlePickAndUploadImage}
+            navigation={navigation} // ส่ง navigation ไปให้กดคลิกการ์ดนัดหมายได้
           />
         )}
 
@@ -218,6 +219,7 @@ export default function PetDetail({ navigation, route }) {
             weightTrend={weightTrend}
             stats={stats}
             history={history}
+            navigation={navigation} // ส่ง navigation ไปเพื่อให้กดดูรายละเอียดการรักษาได้
           />
         )}
 

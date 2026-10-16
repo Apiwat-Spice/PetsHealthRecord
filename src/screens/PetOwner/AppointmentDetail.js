@@ -46,7 +46,6 @@ export default function AppointmentDetail({ navigation, route }) {
     }
   };
 
- 
   const translateType = (type) => {
     switch (type) {
       case 'Walk-in': return 'เข้ารับบริการหน้าคลินิก (Walk-in)';
@@ -58,7 +57,6 @@ export default function AppointmentDetail({ navigation, route }) {
     }
   };
 
-
   const translateTitle = (title) => {
     switch (title) {
       case 'Health Checkup': return 'ตรวจสุขภาพประจำปี';
@@ -68,6 +66,37 @@ export default function AppointmentDetail({ navigation, route }) {
       case 'Grooming / Boarding': return 'อาบน้ำตัดขน / ฝากเลี้ยง';
       default: return title || 'ตรวจสุขภาพทั่วไป';
     }
+  };
+
+  const handleCancelAppointment = () => {
+    Alert.alert(
+      "ยืนยันการยกเลิกนัด",
+      "คุณต้องการยกเลิกนัดหมายนี้ใช่หรือไม่?",
+      [
+        { text: "ไม่", style: "cancel" },
+        {
+          text: "ใช่, ยกเลิกนัด",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const response = await fetch(`${API_URL}/appointments/cancel/${appointmentId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status_detail: 'เจ้าของสัตว์เลี้ยงกดยกเลิกผ่านแอปพลิเคชัน' })
+              });
+              if (response.ok) {
+                Alert.alert("สำเร็จ", "ยกเลิกนัดหมายเรียบร้อยแล้ว");
+                navigation.goBack();
+              } else {
+                Alert.alert("แจ้งเตือน", "ไม่สามารถยกเลิกนัดหมายได้");
+              }
+            } catch (err) {
+              console.log("Cancel Error:", err);
+            }
+          }
+        }
+      ]
+    );
   };
 
   const statusInfo = getStatusInfo(detailData?.status);
@@ -172,6 +201,13 @@ export default function AppointmentDetail({ navigation, route }) {
           </View>
         )}
 
+        {/* ส่วนที่ 5: ปุ่มยกเลิกนัด */}
+        {detailData?.status !== 'cancelled' && detailData?.status !== 'completed' && (
+          <Pressable style={styles.cancelButton} onPress={handleCancelAppointment}>
+            <Text style={styles.cancelButtonText}>ยกเลิกนัดหมายนี้</Text>
+          </Pressable>
+        )}
+
       </ScrollView>
     </SafeAreaView>
   );
@@ -199,5 +235,21 @@ const styles = StyleSheet.create({
   cancelSectionTitle: { fontSize: 16, fontWeight: 'bold', color: '#E53E3E', marginBottom: 10, borderBottomWidth: 1, borderBottomColor: '#FED7D7', paddingBottom: 6 },
   cancelReasonBox: { marginTop: 4 },
   cancelReasonLabel: { fontSize: 13, color: '#C53030', fontWeight: '600', marginBottom: 4 },
-  cancelReasonText: { fontSize: 13, color: '#9B2C2C', lineHeight: 18 }
+  cancelReasonText: { fontSize: 13, color: '#9B2C2C', lineHeight: 18 },
+
+  cancelButton: {
+    backgroundColor: '#FFF5F5',
+    borderWidth: 1,
+    borderColor: '#FEB2B2',
+    borderRadius: 12,
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 5,
+    marginBottom: 20
+  },
+  cancelButtonText: {
+    color: '#E53E3E',
+    fontSize: 15,
+    fontWeight: 'bold'
+  }
 });

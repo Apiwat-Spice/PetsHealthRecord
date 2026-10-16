@@ -17,7 +17,15 @@ export default function ClinicsTab({ clinics, refreshing, onRefresh, onBookAppoi
             <View style={styles.card}>
                 {/* รูปภาพและป้ายสถานะคลินิก */}
                 <View style={styles.imageContainer}>
-                    <Image source={require('../../../src/public/pictures/background-welcome.png')} style={styles.clinicImage} />
+                    <Image
+                        source={
+                            item.profile_image_url && item.profile_image_url !== ''
+                                ? { uri: item.profile_image_url } //ดึงรูปจาก Database
+                                : require('../../../src/public/pictures/background-welcome.png') // ภาพสำรองถ้ายังไม่มีรูป
+                        }
+                        style={styles.clinicImage}
+                        resizeMode="cover"
+                    />
                     <View style={styles.badgeOverlay}>
                         <Feather name="check-circle" size={13} color="#FFF" />
                         <Text style={styles.badgeText}> คลินิกพาร์ทเนอร์</Text>

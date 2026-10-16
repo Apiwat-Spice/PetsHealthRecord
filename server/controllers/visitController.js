@@ -31,7 +31,7 @@ exports.getVisitHistoryByOwnerId = async (req, res) => {
         )
       `)
       // 🟢 ตรวจสอบตรงนี้: หากในตาราง pets ของคุณใช้ชื่อ pet_owner_id ให้เปลี่ยนตรงนี้ให้ตรงกัน
-      .eq("appointments.pets.pet_owner_id", ownerId) 
+      .eq("appointments.pets.pet_owner_id", ownerId)
       .order("visit_date", { ascending: false })
       .order("visit_time", { ascending: false });
 
@@ -50,14 +50,73 @@ exports.getVisitHistoryByOwnerId = async (req, res) => {
       treatment: item.treatment,
       symptoms: item.symptoms,
       note: item.note,
-      vet_name: item.clinic_staff 
-        ? `น.สพ. ${item.clinic_staff.first_name} ${item.clinic_staff.last_name || ''}` 
+      vet_name: item.clinic_staff
+        ? `น.สพ. ${item.clinic_staff.first_name} ${item.clinic_staff.last_name || ''}`
         : 'คลินิกรักษาสัตว์'
     }));
 
     return res.status(200).json(formattedData);
   } catch (error) {
     console.error("Get All Visit History Error:", error);
+    return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
+  }
+};
+// ดึงรายละเอียดประวัติการรักษาตาม visit_id (รวมข้อมูลจาก visit_records, appointments และ vets)
+exports.getVisitDetailById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabase
+      .from("visit_records")
+      .select(`
+        *,
+        appointments (
+          appointment_id,
+          title,
+          type,
+          appointment_date,
+          appointment_time,
+          vets (
+            first_name,
+            last_name
+          )
+        ),
+        clinic_staff (
+          first_name,
+          last_name
+        )
+      `)
+      .eq("visit_id", id)
+      .single();
+
+    if (error) {
+      console.error("Supabase Error:", error);
+      return res.status(400).json({ message: error.message });
+    }
+
+    if (!data) {
+      return res.status(404).json({ message: "ไม่พบข้อมูลประวัติการรักษา" });
+    }
+
+    // จัดรูปทรงข้อมูลให้ใช้งานง่ายบนแอปพลิเคชัน
+    const formattedData = {
+      visit_id: data.visit_id,
+      visit_date: data.visit_date,
+      visit_time: data.visit_time,
+      weight: data.weight,
+      symptoms: data.symptoms,
+      diagnosis: data.diagnosis,
+      treatment: data.treatment,
+      note: data.note,
+      title: data.appointments?.title,
+      type: data.appointments?.type,
+      vets: data.appointments?.vets,
+      clinic_staff: data.clinic_staff
+    };
+
+    return res.status(200).json(formattedData);
+  } catch (error) {
+    console.error("Get Visit Detail Error:", error);
     return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
   }
 };

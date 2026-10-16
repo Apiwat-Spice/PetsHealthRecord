@@ -62,16 +62,24 @@ const fullName = (row) => (row ? `${row.first_name || ''} ${row.last_name || ''}
 
 // จัดหมวดการเข้ารับบริการ: vaccine / checkup / treatment / other
 const classifyVisit = (appt, visit) => {
-    const type = String(appt?.type || '').toLowerCase();
-    if (type.includes('vaccin')) return 'vaccine';
-    if (type.includes('health') || type.includes('check')) return 'checkup';
-    if (type.includes('treat')) return 'treatment';
-
-    const text = `${appt?.title || ''} ${visit?.treatment || ''} ${visit?.diagnosis || ''}`.toLowerCase();
-    if (/วัคซีน|vaccin/.test(text)) return 'vaccine';
-    if (/ตรวจ|check/.test(text)) return 'checkup';
-    if (/รักษา|ผ่าตัด|treat/.test(text)) return 'treatment';
-    return 'other';
+    const title = String(appt?.title || '').trim();
+    switch (title) {
+        case 'Health Checkup': return 'checkup';
+        case 'Vaccination': return 'vaccine';
+        case 'Sick Visit / Consultation': return 'consultation';
+        case 'Spay / Neuter': return 'neuter';
+        case 'Grooming / Boarding': return 'grooming';
+        default: {
+            // กรณีเผื่อข้อมูลเก่าหรือระบุผ่าน type/diagnosis
+            const text = `${appt?.type || ''} ${visit?.treatment || ''} ${visit?.diagnosis || ''}`.toLowerCase();
+            if (/วัคซีน|vaccin/.test(text)) return 'vaccine';
+            if (/ตรวจสุขภาพ|health checkup/.test(text)) return 'checkup';
+            if (/ป่วย|consultation|sick/.test(text)) return 'consultation';
+            if (/ทำหมัน|neuter|spay/.test(text)) return 'neuter';
+            if (/อาบน้ำ|ตัดขน|grooming|boarding/.test(text)) return 'grooming';
+            return 'other';
+        }
+    }
 };
 
 const uploadBufferToCloudinary = (buffer, folderName) =>
@@ -86,7 +94,7 @@ const uploadBufferToCloudinary = (buffer, folderName) =>
         stream.end(buffer);
     });
 
-// GET /pets/detail/:petId?ownerId=123
+
 exports.getPetDetail = async (req, res) => {
     try {
         const petId = Number(req.params.petId);
@@ -113,7 +121,7 @@ exports.getPetDetail = async (req, res) => {
         const now = bangkokNow();
         const upcoming = appts
             .filter((a) =>
-                ["pending", "confirmed"].includes(a.status) &&
+                ["confirmed"].includes(a.status) &&
                 (a.appointment_date > now.date || (a.appointment_date === now.date && a.appointment_time >= now.time))
             )
             .sort((a, b) => `${a.appointment_date} ${a.appointment_time}`.localeCompare(`${b.appointment_date} ${b.appointment_time}`))
@@ -154,7 +162,8 @@ exports.getPetDetail = async (req, res) => {
             }
         }
 
-        const stats = { checkup: 0, vaccine: 0, treatment: 0, other: 0 };
+        //กำหนดโครงสร้าง stats ให้ครอบคลุมทั้ง 5 หมวดหมู่บริการ
+        const stats = { checkup: 0, vaccine: 0, consultation: 0, neuter: 0, grooming: 0, other: 0 };
 
         const history = visits.map((v) => {
             const appt = apptById[v.appointment_id];
@@ -174,13 +183,24 @@ exports.getPetDetail = async (req, res) => {
                 note: v.note,
                 weight: v.weight != null ? Number(v.weight) : null,
                 vet_name: fullName(vetMap[appt?.vet_id]) || null,
+                clinic_name: clinicName //แนบชื่อคลินิกไปด้วย
             };
         });
 
-        const weightTrend = visits
-            .filter((v) => v.weight !== null && v.weight !== undefined)
-            .map((v) => ({ date: v.visit_date, weight: Number(v.weight) }))
-            .sort((a, b) => a.date.localeCompare(b.date));
+        //จัดการกราฟแนวโน้มน้ำหนัก (รวมน้ำหนักตั้งต้นจากตาราง pets + visit_records)
+        let weightTrend = visits
+            .filter((v) => v.weight !== null && v.weight !== undefined && Number(v.weight) > 0)
+            .map((v) => ({ date: v.visit_date, weight: Number(v.weight) }));
+
+        if (pet.weight !== null && pet.weight !== undefined && Number(pet.weight) > 0) {
+            const initialDate = pet.created_at ? pet.created_at.slice(0, 10) : '2026-01-01';
+            const isDuplicateDate = weightTrend.some(item => item.date === initialDate);
+            if (!isDuplicateDate) {
+                weightTrend.push({ date: initialDate, weight: Number(pet.weight) });
+            }
+        }
+
+        weightTrend.sort((a, b) => a.date.localeCompare(b.date));
 
         return res.status(200).json({
             pet,
@@ -338,7 +358,7 @@ exports.getDashboardSummary = async (req, res) => {
         const clinicName = clinicData?.clinic_name || 'Happy Paws Clinic';
 
         if (petIds.length === 0) {
-            return res.status(200).json({ petCount: 0, pendingCount: 0, historyCount: 0, upcoming: null, recentHistory: null });
+            return res.status(200).json({ petCount: 0, pendingCount: 0, historyCount: 0, upcoming: null, recentHistories: [] });
         }
 
         const { data: appts, error: apptsError } = await supabase
@@ -348,18 +368,16 @@ exports.getDashboardSummary = async (req, res) => {
         if (apptsError) throw apptsError;
 
         const pendingCount = appts.filter(a => a.status === "pending").length;
+        const now = bangkokNow();
 
-        const now = new Date();
-        const bangkokDate = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
-        const bangkokTime = new Date(now.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(11, 19);
-
+        //1. นัดหมายล่วงหน้า: แสดงเฉพาะนัดที่ "ยืนยันแล้ว" (confirmed) และยังไม่ผ่านเวลาปัจจุบัน
         const upcoming = appts
-            .filter(a => ["pending", "confirmed"].includes(a.status) &&
-                (a.appointment_date > bangkokDate || (a.appointment_date === bangkokDate && a.appointment_time >= bangkokTime)))
+            .filter(a => a.status === "confirmed" &&
+                (a.appointment_date > now.date || (a.appointment_date === now.date && a.appointment_time >= now.time)))
             .sort((a, b) => `${a.appointment_date} ${a.appointment_time}`.localeCompare(`${b.appointment_date} ${b.appointment_time}`))[0];
 
         const apptIds = appts.map(a => a.appointment_id);
-        let recentHistory = null;
+        let recentHistories = [];
         let historyCount = 0;
 
         if (apptIds.length > 0) {
@@ -372,27 +390,33 @@ exports.getDashboardSummary = async (req, res) => {
 
             if (!visitError && visits && visits.length > 0) {
                 historyCount = visits.length;
-                const latestVisit = visits[0];
-                const appt = appts.find(a => a.appointment_id === latestVisit.appointment_id);
 
-                let vetName = null;
-                if (appt?.vet_id) {
-                    const { data: vetData } = await supabase
-                        .from("vets")
-                        .select("first_name, last_name")
-                        .eq("vet_id", appt.vet_id)
-                        .maybeSingle();
-                    if (vetData) {
-                        vetName = `น.สพ. ${vetData.first_name} ${vetData.last_name || ''}`.trim();
+                //2. ดึงประวัติการรักษาล่าสุดมาแสดง "มากสุด 2 อัน"
+                const latestVisits = visits.slice(0, 2);
+
+                for (const latestVisit of latestVisits) {
+                    const appt = appts.find(a => a.appointment_id === latestVisit.appointment_id);
+
+                    let vetName = null;
+                    if (appt?.vet_id) {
+                        const { data: vetData } = await supabase
+                            .from("vets")
+                            .select("first_name, last_name")
+                            .eq("vet_id", appt.vet_id)
+                            .maybeSingle();
+                        if (vetData) {
+                            vetName = `น.สพ. ${vetData.first_name} ${vetData.last_name || ''}`.trim();
+                        }
                     }
-                }
 
-                recentHistory = {
-                    ...latestVisit,
-                    pet_name: petMap[appt?.pet_id],
-                    vet_name: vetName || 'ไม่ระบุสัตวแพทย์',
-                    clinic_name: clinicName
-                };
+                    recentHistories.push({
+                        ...latestVisit,
+                        pet_id: appt?.pet_id, // แนบ pet_id เพื่อใช้นำทางไปหน้าประวัติสัตว์เลี้ยง
+                        pet_name: petMap[appt?.pet_id],
+                        vet_name: vetName || 'ไม่ระบุสัตวแพทย์',
+                        clinic_name: clinicName
+                    });
+                }
             }
         }
 
@@ -401,7 +425,7 @@ exports.getDashboardSummary = async (req, res) => {
             pendingCount,
             historyCount,
             upcoming: upcoming ? { ...upcoming, pet_name: petMap[upcoming.pet_id], clinic_name: clinicName } : null,
-            recentHistory
+            recentHistories // ส่งออกเป็นอาเรย์สูงสุด 2 รายการ
         });
 
     } catch (error) {

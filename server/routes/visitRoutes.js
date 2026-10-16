@@ -4,5 +4,6 @@ const visitController = require("../controllers/visitController"); // ปรั�
 
 // Endpoint: GET /api/visit-records/owner/:ownerId
 router.get("/owner/:ownerId", visitController.getVisitHistoryByOwnerId);
+router.get("/:id", visitController.getVisitDetailById);
 
 module.exports = router;

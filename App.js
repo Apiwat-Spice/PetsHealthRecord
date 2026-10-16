@@ -15,6 +15,7 @@ import AppointmentDetail from "./src/screens/PetOwner/AppointmentDetail";
 import Pets from "./src/screens/PetOwner/Pets";
 import PetDetail from "./src/screens/PetOwner/PetDetail";
 import AllVisitHistory from "./src/screens/PetOwner/AllVisitHistory";
+import VisitDetail from "./src/screens/PetOwner/VisitDetail";
 
 import EditProfile from "./src/screens/PetOwner/EditProfile";
 import LoginPassword from "./src/screens/auth/LoginPassword";
@@ -67,6 +68,7 @@ export default function App() {
               <Stack.Screen name="Pets" component={Pets} />
               <Stack.Screen name="PetDetail" component={PetDetail} />
               <Stack.Screen name="AllVisitHistory" component={AllVisitHistory} />
+              <Stack.Screen name="VisitDetail" component={VisitDetail} options={{ headerShown: false }} />
 
               <Stack.Screen name="EditProfile" component={EditProfile} />
               <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTP} />

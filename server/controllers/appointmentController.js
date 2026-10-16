@@ -111,15 +111,15 @@ exports.getAppointmentById = async (req, res) => {
 };
 // ดึงรายการนัดหมายตามวันที่ เพื่อนำไปเช็กเวลาที่ไม่ว่าง
 exports.getAppointmentsByClinicAndDate = async (req, res) => {
-  try {
-    const { clinicId, date } = req.params;
-    const FIXED_CLINIC_ID = Number(clinicId) || 2;
+    try {
+        const { clinicId, date } = req.params;
+        const FIXED_CLINIC_ID = Number(clinicId) || 2;
 
-    // 1. หา pet_id ทั้งหมดที่เป็นของเจ้าของ หรืออยู่ในระบบของคลินิกนี้ 
-    // (หากระบบใช้คลินิกเดียว สามารถดึงนัดหมายทั้งหมดในวันที่นั้นได้เลย)
-    const { data, error } = await supabase
-      .from("appointments")
-      .select(`
+        // 1. หา pet_id ทั้งหมดที่เป็นของเจ้าของ หรืออยู่ในระบบของคลินิกนี้ 
+        // (หากระบบใช้คลินิกเดียว สามารถดึงนัดหมายทั้งหมดในวันที่นั้นได้เลย)
+        const { data, error } = await supabase
+            .from("appointments")
+            .select(`
         appointment_id,
         appointment_date,
         appointment_time,
@@ -129,14 +129,38 @@ exports.getAppointmentsByClinicAndDate = async (req, res) => {
           pet_owner_id
         )
       `)
-      .eq("appointment_date", date)
-      .in("status", ["pending", "confirmed"]); // เช็กทั้งที่รออนุมัติและยืนยันแล้ว
+            .eq("appointment_date", date)
+            .in("status", ["pending", "confirmed"]); // เช็กทั้งที่รออนุมัติและยืนยันแล้ว
 
-    if (error) throw error;
+        if (error) throw error;
 
-    return res.status(200).json({ appointments: data || [] });
-  } catch (error) {
-    console.error("Get Appointments By Date Error:", error);
-    return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย" });
-  }
+        return res.status(200).json({ appointments: data || [] });
+    } catch (error) {
+        console.error("Get Appointments By Date Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย" });
+    }
+};
+//ยกเลิกการนัดหมายโดยเจ้าของสัตว์เลี้ยง
+exports.cancelAppointment = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status_detail } = req.body;
+
+        const { data, error } = await supabase
+            .from("appointments")
+            .update({
+                status: 'cancelled',
+                status_detail: status_detail || 'เจ้าของสัตว์เลี้ยงยกเลิกนัดหมายเอง'
+            })
+            .eq("appointment_id", id)
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        return res.status(200).json({ message: "ยกเลิกนัดหมายสำเร็จ", data });
+    } catch (error) {
+        console.error("Cancel Appointment Error:", error);
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดในการยกเลิกนัดหมาย" });
+    }
 };

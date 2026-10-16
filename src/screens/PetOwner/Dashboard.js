@@ -6,7 +6,8 @@ import {
   View,
   ScrollView,
   ActivityIndicator,
-  TouchableOpacity
+  TouchableOpacity,
+  Image
 } from "react-native";
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -16,12 +17,13 @@ import { API_URL } from '../../config';
 
 export default function Dashboard({ navigation }) {
   const [ownerName, setOwnerName] = useState("");
+  const [ownerImage, setOwnerImage] = useState(""); // 🟢 เพิ่ม state เก็บรูปโปรไฟล์เจ้าของ
   const [dashboardData, setDashboardData] = useState({
     petCount: 0,
     pendingCount: 0,
     historyCount: 0,
     upcoming: null,
-    recentHistory: null
+    recentHistories: []
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -31,6 +33,7 @@ export default function Dashboard({ navigation }) {
       if (ownerString) {
         const owner = JSON.parse(ownerString);
         setOwnerName(owner.first_name || owner.pet_owner_name || "คุณลูกค้า");
+        setOwnerImage(owner.profile_image_url || ""); // 🟢 ดึงลิงก์รูปโปรไฟล์เจ้าของ
 
         const ownerId = owner.pet_owner_id ?? owner.pet_owners_id;
 
@@ -53,7 +56,6 @@ export default function Dashboard({ navigation }) {
     }, [])
   );
 
-  // ฟังก์ชันแปลงประเภทหรือหัวข้อการรักษาเป็นภาษาไทย
   const translateTreatmentType = (type) => {
     if (!type) return 'ประวัติการรักษา';
     switch (type.trim()) {
@@ -85,12 +87,22 @@ export default function Dashboard({ navigation }) {
             <Text style={styles.greeting}>สวัสดี, {ownerName}</Text>
             <Text style={styles.subGreeting}>ยินดีต้อนรับสู่แดชบอร์ดดูแลสัตว์เลี้ยง</Text>
           </View>
-          <View style={styles.avatarPlaceholder}>
-            <Feather name="user" size={22} color="#FFF" />
-          </View>
+
+          {/* 🟢 แสดงรูปโปรไฟล์เจ้าของที่มุมขวาบน (กดแล้วไปหน้าโปรไฟล์ได้) */}
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => navigation.navigate('Profile')}
+          >
+            {ownerImage ? (
+              <Image source={{ uri: ownerImage }} style={styles.avatarImage} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Feather name="user" size={22} color="#FFF" />
+              </View>
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* แจ้งเตือนสถานะสำคัญ */}
         {dashboardData.pendingCount > 0 && (
           <TouchableOpacity
             style={styles.alertBanner}
@@ -159,7 +171,7 @@ export default function Dashboard({ navigation }) {
             <View style={styles.rowBetween}>
               <Text style={styles.upcomingTitle}>{translateTreatmentType(dashboardData.upcoming.title) || 'นัดหมายเข้ารับบริการ'}</Text>
               <View style={styles.badgeSoon}>
-                <Text style={styles.badgeSoonText}>เร็ว ๆ นี้</Text>
+                <Text style={styles.badgeSoonText}>ยืนยันแล้ว</Text>
               </View>
             </View>
 
@@ -172,7 +184,7 @@ export default function Dashboard({ navigation }) {
 
             <View style={styles.rowBetween}>
               <View style={styles.badgePetOrange}>
-                <Text style={[styles.badgePetText , { color: "#F59E0B", fontSize: 11, fontWeight: "bold"}]}>{dashboardData.upcoming.pet_name}</Text>
+                <Text style={[styles.badgePetText, { color: "#F59E0B", fontSize: 11, fontWeight: "bold" }]}>{dashboardData.upcoming.pet_name}</Text>
               </View>
               <Text style={styles.clinicName}>
                 {dashboardData.upcoming.clinic_name}
@@ -182,7 +194,7 @@ export default function Dashboard({ navigation }) {
         ) : (
           <View style={[styles.upcomingCard, styles.emptyCard]}>
             <Feather name="calendar" size={28} color="#CCC" style={{ marginBottom: 6 }} />
-            <Text style={styles.emptyText}>ไม่มีรายการนัดหมายล่วงหน้าในขณะนี้</Text>
+            <Text style={styles.emptyText}>ไม่มีรายการนัดหมายที่ยืนยันแล้วในขณะนี้</Text>
           </View>
         )}
 
@@ -192,47 +204,53 @@ export default function Dashboard({ navigation }) {
           <Text style={[styles.sectionTitle, { color: "#0056D2" }]}> ประวัติการรักษาล่าสุด</Text>
         </View>
 
-        {dashboardData.recentHistory ? (
-          <TouchableOpacity
-            style={styles.historyCard}
-            activeOpacity={0.9}
-            onPress={() => {
-              if (dashboardData.recentHistory.appointment_id) {
-                navigation.navigate('AppointmentDetail', { appointmentId: dashboardData.recentHistory.appointment_id });
-              }
-            }}
-          >
-            <View style={styles.rowBetween}>
-              <Text style={styles.historyTitle} numberOfLines={1}>
-                {translateTreatmentType(
-                  dashboardData.recentHistory.appointments?.title ||
-                  dashboardData.recentHistory.appointments?.type ||
-                  dashboardData.recentHistory.treatment
-                )}
+        {dashboardData.recentHistories && dashboardData.recentHistories.length > 0 ? (
+          dashboardData.recentHistories.map((item, index) => (
+            <TouchableOpacity
+              key={index}
+              style={styles.historyCard}
+              activeOpacity={0.9}
+              onPress={() => {
+                if (item.pet_id) {
+                  navigation.navigate('PetDetail', {
+                    petId: item.pet_id,
+                    initialTab: 'health'
+                  });
+                }
+              }}
+            >
+              <View style={styles.rowBetween}>
+                <Text style={styles.historyTitle} numberOfLines={1}>
+                  {translateTreatmentType(
+                    item.appointments?.title ||
+                    item.appointments?.type ||
+                    item.treatment
+                  )}
+                </Text>
+                <View style={styles.badgeDate}>
+                  <Text style={styles.badgeDateText}>{item.visit_date}</Text>
+                </View>
+              </View>
+
+              <Text style={styles.historyDesc} numberOfLines={1}>
+                {item.diagnosis || item.symptoms || 'บันทึกการเข้ารับบริการเรียบร้อย'}
               </Text>
-              <View style={styles.badgeDate}>
-                <Text style={styles.badgeDateText}>{dashboardData.recentHistory.visit_date}</Text>
-              </View>
-            </View>
+              <View style={[styles.rowBetween, { marginTop: 12, alignItems: 'flex-end' }]}>
+                <View style={styles.badgePetBlue}>
+                  <Text style={[styles.badgePetText, { color: "#0056D2", fontSize: 11, fontWeight: "bold" }]}>{item.pet_name}</Text>
+                </View>
 
-            <Text style={styles.historyDesc} numberOfLines={1}>
-              {dashboardData.recentHistory.diagnosis || dashboardData.recentHistory.symptoms || 'บันทึกการเข้ารับบริการเรียบร้อย'}
-            </Text>
-            <View style={[styles.rowBetween, { marginTop: 12, alignItems: 'flex-end' }]}>
-              <View style={styles.badgePetBlue}>
-                <Text style={[styles.badgePetText , { color: "#0056D2", fontSize: 11, fontWeight: "bold"}]}>{dashboardData.recentHistory.pet_name}</Text>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={styles.historyVetText}>
+                    {item.vet_name}
+                  </Text>
+                  <Text style={styles.historyClinicText}>
+                    {item.clinic_name}
+                  </Text>
+                </View>
               </View>
-
-              <View style={{ alignItems: 'flex-end' }}>
-                <Text style={styles.historyVetText}>
-                  {dashboardData.recentHistory.vet_name}
-                </Text>
-                <Text style={styles.historyClinicText}>
-                  {dashboardData.recentHistory.clinic_name}
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          ))
         ) : (
           <View style={[styles.historyCard, styles.emptyCard]}>
             <MaterialCommunityIcons name="clipboard-text-outline" size={28} color="#CCC" style={{ marginBottom: 6 }} />
@@ -254,6 +272,7 @@ const styles = StyleSheet.create({
   greeting: { fontSize: 20, fontWeight: "bold", color: "#0056D2" },
   subGreeting: { fontSize: 13, color: "#666", marginTop: 2 },
   avatarPlaceholder: { width: 42, height: 42, borderRadius: 21, backgroundColor: "#0056D2", justifyContent: 'center', alignItems: 'center' },
+  avatarImage: { width: 42, height: 42, borderRadius: 21, borderWidth: 1.5, borderColor: '#0056D2' }, // 🟢 เพิ่มสไตล์สำหรับรูปโปรไฟล์เจ้าของ
   alertBanner: {
     flexDirection: "row",
     backgroundColor: "#FFFBEB",
@@ -327,7 +346,6 @@ const styles = StyleSheet.create({
   historyDesc: { fontSize: 13, color: "#666", marginTop: 6 },
   emptyCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: 25, backgroundColor: '#FFF', borderColor: '#EEE' },
   emptyText: { color: '#888', fontSize: 13 },
-  // สไตล์สำหรับประวัติการรักษาล่าสุด (2 แถว: ชื่อแพทย์ และ ชื่อคลินิกขนาดเท่าการ์ดบน)
   historyVetText: {
     fontSize: 12,
     fontWeight: 'bold',
@@ -337,7 +355,7 @@ const styles = StyleSheet.create({
   historyClinicText: {
     fontSize: 12,
     fontWeight: 'bold',
-    color: '#0056D2', // ใช้สีโทนส้ม/ทองให้เข้ากับคลินิก หรือเปลี่ยนเป็น #0056D2 ตามชอบ
+    color: '#0056D2',
     marginTop: 2,
     textAlign: 'right'
   },

@@ -3,9 +3,23 @@ import { StyleSheet, Text, View, TouchableOpacity, Image, ActivityIndicator } fr
 import { Feather } from '@expo/vector-icons';
 import { calcAge, formatWeight } from './PetUtils';
 
-export default function PetGeneralTab({ pet, cautions, upcoming, uploadingImage, onPickImage }) {
+export default function PetGeneralTab({ pet, cautions, upcoming, uploadingImage, onPickImage, navigation }) {
+
+  // 🟢 แปลหัวข้อนัดหมายเป็นภาษาไทย
+  const translateTitle = (title) => {
+    switch (title) {
+      case 'Health Checkup': return 'ตรวจสุขภาพประจำปี';
+      case 'Vaccination': return 'ฉีดวัคซีน';
+      case 'Sick Visit / Consultation': return 'ตรวจรักษาอาการป่วย';
+      case 'Spay / Neuter': return 'ทำหมัน';
+      case 'Grooming / Boarding': return 'อาบน้ำตัดขน / ฝากเลี้ยง';
+      default: return title || 'นัดหมายเข้ารับบริการ';
+    }
+  };
+
   return (
     <View>
+      {/* ข้อมูลพื้นฐาน */}
       <View style={styles.card}>
         <Text style={styles.cardSectionTitle}>ข้อมูลพื้นฐาน</Text>
 
@@ -77,25 +91,43 @@ export default function PetGeneralTab({ pet, cautions, upcoming, uploadingImage,
         </View>
       </View>
 
+      {/* 🟢 ส่วนนัดหมายล่วงหน้า (กดคลิกไปดูรายละเอียดได้) */}
       <View style={styles.upcomingBox}>
         <View style={styles.upcomingHeader}>
           <Feather name="calendar" size={18} color="#D9822B" />
           <Text style={styles.upcomingBoxTitle}> นัดหมายล่วงหน้า</Text>
         </View>
 
-        {upcoming.length > 0 ? (
-          <View style={styles.upcomingCardInner}>
-            <Text style={styles.upcomingInnerTitle}>{upcoming[0].title || 'นัดหมายฉีดวัคซีน'}</Text>
+        {upcoming && upcoming.length > 0 ? (
+          <TouchableOpacity
+            style={styles.upcomingCardInner}
+            activeOpacity={0.8}
+            onPress={() => {
+              // กดแล้วพาไปหน้า AppointmentDetail พร้อมส่ง appointment_id
+              if (upcoming[0].appointment_id && navigation) {
+                navigation.navigate('AppointmentDetail', {
+                  appointmentId: upcoming[0].appointment_id
+                });
+              }
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={styles.upcomingInnerTitle}>
+                {translateTitle(upcoming[0].title)}
+              </Text>
+              <Feather name="chevron-right" size={18} color="#D9822B" />
+            </View>
+
             <View style={styles.upcomingBadgeRow}>
               <View style={styles.upcomingDateBadge}>
                 <Feather name="calendar" size={13} color="#FFF" style={{ marginRight: 4 }} />
                 <Text style={styles.upcomingDateText}>
-                  {upcoming[0].appointment_date} เวลา {upcoming[0].appointment_time?.substring(0, 5)} น.
+                  วันที่ {upcoming[0].appointment_date} เวลา {upcoming[0].appointment_time?.substring(0, 5)} น.
                 </Text>
               </View>
             </View>
-            <Text style={styles.upcomingClinicName}>คลินิกรักษาสัตว์ HappyPet</Text>
-          </View>
+            <Text style={styles.upcomingClinicName}>คลินิกรักษาสัตว์ Happy Paws</Text>
+          </TouchableOpacity>
         ) : (
           <Text style={styles.emptyUpcomingText}>ไม่มีรายการนัดหมายล่วงหน้า</Text>
         )}
@@ -173,4 +205,4 @@ const styles = StyleSheet.create({
   upcomingDateText: { color: '#FFF', fontSize: 11, fontWeight: 'bold' },
   upcomingClinicName: { fontSize: 12, color: '#9E6116', marginTop: 4 },
   emptyUpcomingText: { color: '#B39169', fontSize: 13, textAlign: 'center', paddingVertical: 12 },
-});
+}); 
