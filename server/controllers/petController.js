@@ -101,6 +101,15 @@ exports.getPetDetail = async (req, res) => {
         const ownerId = Number(req.query.ownerId);
         if (!petId || !ownerId) return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
 
+        //ประกาศตัวแปร clinicName ไว้ตรงนี้เพื่อป้องกัน Error
+        const FIXED_CLINIC_ID = 2;
+        const { data: clinicData } = await supabase
+            .from("clinics")
+            .select("clinic_name")
+            .eq("clinic_id", FIXED_CLINIC_ID)
+            .maybeSingle();
+        const clinicName = clinicData?.clinic_name || 'Happy Paws Clinic';
+
         const { data: pet, error: petError } = await supabase
             .from("pets")
             .select("*")
@@ -162,7 +171,6 @@ exports.getPetDetail = async (req, res) => {
             }
         }
 
-        //กำหนดโครงสร้าง stats ให้ครอบคลุมทั้ง 5 หมวดหมู่บริการ
         const stats = { checkup: 0, vaccine: 0, consultation: 0, neuter: 0, grooming: 0, other: 0 };
 
         const history = visits.map((v) => {
@@ -183,11 +191,10 @@ exports.getPetDetail = async (req, res) => {
                 note: v.note,
                 weight: v.weight != null ? Number(v.weight) : null,
                 vet_name: fullName(vetMap[appt?.vet_id]) || null,
-                clinic_name: clinicName //แนบชื่อคลินิกไปด้วย
+                clinic_name: clinicName //ตอนนี้ใช้งานได้ปกติเพราะประกาศไว้ด้านบนแล้ว
             };
         });
 
-        //จัดการกราฟแนวโน้มน้ำหนัก (รวมน้ำหนักตั้งต้นจากตาราง pets + visit_records)
         let weightTrend = visits
             .filter((v) => v.weight !== null && v.weight !== undefined && Number(v.weight) > 0)
             .map((v) => ({ date: v.visit_date, weight: Number(v.weight) }));
