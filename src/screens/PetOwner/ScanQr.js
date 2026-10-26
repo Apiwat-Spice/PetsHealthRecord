@@ -10,6 +10,7 @@ import {
 import { useState, useEffect } from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import { GUEST_WEB_URL } from "../../config";
 
 const { width } = Dimensions.get("window");
 const SCAN_SIZE = 260;
@@ -17,7 +18,7 @@ const SIDE_WIDTH = (width - SCAN_SIZE) / 2;
 
 export default function ScanQR() {
   const [permission, requestPermission] = useCameraPermissions();
-  const [scanned, setScanned] = useState(false); // ป้องกันการสแกนซ้ำรัวๆ
+  const [scanned, setScanned] = useState(false);
 
   useEffect(() => {
     if (!permission?.granted) {
@@ -25,7 +26,6 @@ export default function ScanQR() {
     }
   }, [permission]);
 
-  // ฟังก์ชันจัดการเมื่อสแกน QR Code สำเร็จ
   const handleBarcodeScanned = async ({ type, data }) => {
     if (scanned) return;
     setScanned(true);
@@ -33,7 +33,7 @@ export default function ScanQR() {
     try {
       let targetUrl = data.trim();
       if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
-        targetUrl = `http://localhost:3001/guest/pet/${targetUrl}`;
+        targetUrl = `${GUEST_WEB_URL}/guest/pet/${targetUrl}`;
       }
 
       const supported = await Linking.canOpenURL(targetUrl);
@@ -46,7 +46,6 @@ export default function ScanQR() {
       console.error("Open URL Error:", error);
       Alert.alert("เกิดข้อผิดพลาด", "ไม่สามารถเปิดเว็บเพจได้");
     } finally {
-      // รีเซ็ตสถานะให้สามารถสแกนใหม่ได้หลังผ่านไป 3 วินาที
       setTimeout(() => setScanned(false), 3000);
     }
   };
@@ -59,7 +58,6 @@ export default function ScanQR() {
     <View style={styles.container}>
       <StatusBar style="light" />
 
-      {/* เลเยอร์กล้อง */}
       {permission.granted ? (
         <CameraView
           style={StyleSheet.absoluteFillObject}
@@ -70,7 +68,6 @@ export default function ScanQR() {
         <View style={styles.blackBg} />
       )}
 
-      {/* เลเยอร์ Overlay กรอบสแกน */}
       <View style={styles.overlayContainer} pointerEvents="none">
         <View style={styles.darkTop} />
         <View style={styles.darkMiddleRow}>
@@ -89,7 +86,6 @@ export default function ScanQR() {
           <Text style={styles.scanSub}>จัดให้อยู่ในกรอบเพื่อเปิดหน้าเว็บข้อมูลสัตว์เลี้ยง</Text>
         </View>
       </View>
-
     </View>
   );
 }

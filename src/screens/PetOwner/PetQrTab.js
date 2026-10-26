@@ -4,7 +4,7 @@ import { Feather } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { API_URL } from '../../config';
+import { API_URL, GUEST_WEB_URL } from '../../config';
 
 export default function PetQrTab({ pet, onResetQr, isResettingQr }) {
   const qrSvgRef = useRef();
@@ -112,7 +112,8 @@ export default function PetQrTab({ pet, onResetQr, isResettingQr }) {
     });
   };
 
-  const publicWebUrl = `http://localhost:3001/guest/pet/${pet?.qr_code || pet?.pet_id}`;
+  // กำหนดลิงก์ปลายทางชี้ไปที่ Vercel
+  const publicWebUrl = `${GUEST_WEB_URL}/guest/pet/${pet?.qr_code || pet?.pet_id}`;
 
   return (
     <View style={styles.container}>
