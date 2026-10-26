@@ -115,26 +115,33 @@ exports.getAppointmentsByClinicAndDate = async (req, res) => {
         const { clinicId, date } = req.params;
         const FIXED_CLINIC_ID = Number(clinicId) || 2;
 
-        // 1. หา pet_id ทั้งหมดที่เป็นของเจ้าของ หรืออยู่ในระบบของคลินิกนี้ 
-        // (หากระบบใช้คลินิกเดียว สามารถดึงนัดหมายทั้งหมดในวันที่นั้นได้เลย)
-        const { data, error } = await supabase
+        // 1. นับจำนวนสัตวแพทย์ทั้งหมดที่มีในคลินิกนี้ (หรือในระบบ)
+        const { count: vetCount, error: vetError } = await supabase
+            .from("vets")
+            .select("*", { count: 'exact', head: true });
+
+        if (vetError) throw vetError;
+        // กำหนดจำนวนหมออย่างน้อย 1 คน (ถ้าในตาราง vets ว่างเปล่า)
+        const totalVets = (vetCount && vetCount > 0) ? vetCount : 1;
+
+        // 2. ดึงรายการนัดหมายในวันที่เลือก (เฉพาะที่สถานะ pending หรือ confirmed)
+        const { data: appointments, error: apptError } = await supabase
             .from("appointments")
             .select(`
-        appointment_id,
-        appointment_date,
-        appointment_time,
-        status,
-        pets (
-          pet_id,
-          pet_owner_id
-        )
-      `)
+                appointment_id,
+                appointment_date,
+                appointment_time,
+                status
+            `)
             .eq("appointment_date", date)
-            .in("status", ["pending", "confirmed"]); // เช็กทั้งที่รออนุมัติและยืนยันแล้ว
+            .in("status", ["pending", "confirmed"]);
 
-        if (error) throw error;
+        if (apptError) throw apptError;
 
-        return res.status(200).json({ appointments: data || [] });
+        return res.status(200).json({
+            totalVets,
+            appointments: appointments || []
+        });
     } catch (error) {
         console.error("Get Appointments By Date Error:", error);
         return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย" });

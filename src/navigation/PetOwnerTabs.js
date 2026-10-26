@@ -1,5 +1,8 @@
+import React from "react";
+import { StyleSheet } from "react-native";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import DashboardPetOwner from "../screens/PetOwner/Dashboard";
 import Pets from "../screens/PetOwner/Pets";
@@ -10,19 +13,32 @@ import Profile from "../screens/PetOwner/Profile";
 const Tab = createBottomTabNavigator();
 
 export default function PetOwnerTabs({ setIsLoggedIn }) {
+  const insets = useSafeAreaInsets();
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#8EB4D0",
+        tabBarActiveTintColor: "#2C4A6F",
+        tabBarInactiveTintColor: "#94A3B8",
+        tabBarStyle: [
+          styles.tabBar,
+          {
+            height: 56 + insets.bottom,
+            paddingBottom: insets.bottom > 0 ? insets.bottom : 6,
+          },
+        ],
+        tabBarLabelStyle: styles.tabBarLabel,
+        tabBarItemStyle: styles.tabBarItem,
       }}
     >
       <Tab.Screen
         name="Dashboard"
         component={DashboardPetOwner}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="home" size={size} color={color} />
+          tabBarLabel: "หน้าแรก",
+          tabBarIcon: ({ color }) => (
+            <Feather name="home" size={22} color={color} />
           ),
         }}
       />
@@ -31,8 +47,9 @@ export default function PetOwnerTabs({ setIsLoggedIn }) {
         name="MyPets"
         component={Pets}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="heart" size={size} color={color} />
+          tabBarLabel: "สัตว์เลี้ยง",
+          tabBarIcon: ({ color }) => (
+            <MaterialCommunityIcons name="paw" size={23} color={color} />
           ),
         }}
       />
@@ -41,8 +58,9 @@ export default function PetOwnerTabs({ setIsLoggedIn }) {
         name="Scan QR"
         component={ScanQr}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="camera" size={size} color={color} />
+          tabBarLabel: "สแกน QR",
+          tabBarIcon: ({ color }) => (
+            <Feather name="camera" size={22} color={color} />
           ),
         }}
       />
@@ -51,8 +69,9 @@ export default function PetOwnerTabs({ setIsLoggedIn }) {
         name="Clinic"
         component={ClinicScreen}
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="plus-square" size={size} color={color} />
+          tabBarLabel: "คลินิก",
+          tabBarIcon: ({ color }) => (
+            <Feather name="plus-square" size={22} color={color} />
           ),
         }}
       />
@@ -60,8 +79,9 @@ export default function PetOwnerTabs({ setIsLoggedIn }) {
       <Tab.Screen
         name="Profile"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Feather name="user" size={size} color={color} />
+          tabBarLabel: "โปรไฟล์",
+          tabBarIcon: ({ color }) => (
+            <Feather name="user" size={22} color={color} />
           ),
         }}
       >
@@ -72,3 +92,22 @@ export default function PetOwnerTabs({ setIsLoggedIn }) {
     </Tab.Navigator>
   );
 }
+
+const styles = StyleSheet.create({
+  tabBar: {
+    backgroundColor: "#FFFFFF",
+    borderTopWidth: 1,
+    borderTopColor: "#E2EBF2",
+    paddingTop: 6,
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  tabBarLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 2,
+  },
+  tabBarItem: {
+    paddingVertical: 2,
+  },
+});

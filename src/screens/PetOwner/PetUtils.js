@@ -37,3 +37,14 @@ export const splitCautions = (detail) =>
         .split(/[\n,;，、]+/)
         .map((s) => s.trim())
         .filter(Boolean);
+
+// 💡 เพิ่มฟังก์ชันแปลงชนิดสัตว์เป็นอิโมจิ (ป้องกัน Error undefined is not a function)
+export const animalEmoji = (type) => {
+    if (!type) return '🐾';
+    const t = String(type).toLowerCase();
+    if (t.includes('แมว') || t.includes('cat')) return '🐱';
+    if (t.includes('สุนัข') || t.includes('หมา') || t.includes('dog')) return '🐶';
+    if (t.includes('นก') || t.includes('bird')) return '🐦';
+    if (t.includes('กระต่าย') || t.includes('rabbit')) return '🐰';
+    return '🐾';
+};

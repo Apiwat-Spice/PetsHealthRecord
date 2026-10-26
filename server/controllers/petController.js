@@ -26,12 +26,14 @@ exports.getPetsByOwnerId = async (req, res) => {
     }
 };
 
+// ในไฟล์ petController.js
+
 exports.getPetsByOwner = async (req, res) => {
     try {
         const { owner_id } = req.params;
 
-        // ดึงข้อมูลสัตว์เลี้ยงจากตาราง pets ที่ตรงกับเจ้าของ
-        const { data, error } = await supabase
+        // 1. ดึงข้อมูลสัตว์เลี้ยงทั้งหมดของเจ้าของ
+        const { data: pets, error } = await supabase
             .from("pets")
             .select("*")
             .eq("pet_owner_id", owner_id)
@@ -42,7 +44,47 @@ exports.getPetsByOwner = async (req, res) => {
             return res.status(500).json({ message: "ไม่สามารถดึงข้อมูลสัตว์เลี้ยงได้" });
         }
 
-        return res.status(200).json({ pets: data });
+        if (!pets || pets.length === 0) {
+            return res.status(200).json({ pets: [] });
+        }
+
+        // 2. ดึงค่าน้ำหนักล่าสุดจากประวัติการรับบริการ (visit_records) ของสัตว์เลี้ยงแต่ละตัว
+        const petIds = pets.map(p => p.pet_id);
+        const { data: appts } = await supabase
+            .from("appointments")
+            .select("appointment_id, pet_id")
+            .in("pet_id", petIds);
+
+        const apptPetMap = Object.fromEntries((appts || []).map(a => [a.appointment_id, a.pet_id]));
+        const apptIds = Object.keys(apptPetMap);
+
+        let latestWeightMap = {};
+        if (apptIds.length > 0) {
+            const { data: visits } = await supabase
+                .from("visit_records")
+                .select("appointment_id, weight")
+                .in("appointment_id", apptIds)
+                .not("weight", "is", null)
+                .order("visit_date", { ascending: false })
+                .order("visit_time", { ascending: false });
+
+            if (visits) {
+                for (const v of visits) {
+                    const pid = apptPetMap[v.appointment_id];
+                    if (pid && latestWeightMap[pid] === undefined && Number(v.weight) > 0) {
+                        latestWeightMap[pid] = Number(v.weight);
+                    }
+                }
+            }
+        }
+
+        // 3. สลับใช้น้ำหนักล่าสุดจากการตรวจรักษา (ถ้าไม่มีจะใช้ค่าน้ำหนักเดิมในตาราง pets)
+        const updatedPets = pets.map(p => ({
+            ...p,
+            weight: latestWeightMap[p.pet_id] !== undefined ? latestWeightMap[p.pet_id] : p.weight
+        }));
+
+        return res.status(200).json({ pets: updatedPets });
 
     } catch (error) {
         console.error("Server Error:", error);
@@ -68,15 +110,19 @@ const classifyVisit = (appt, visit) => {
         case 'Vaccination': return 'vaccine';
         case 'Sick Visit / Consultation': return 'consultation';
         case 'Spay / Neuter': return 'neuter';
+        case 'Grooming':
+        case 'Bathing':
+        case 'Haircut':
+        case 'Boarding':
         case 'Grooming / Boarding': return 'grooming';
+
         default: {
-            // กรณีเผื่อข้อมูลเก่าหรือระบุผ่าน type/diagnosis
             const text = `${appt?.type || ''} ${visit?.treatment || ''} ${visit?.diagnosis || ''}`.toLowerCase();
             if (/วัคซีน|vaccin/.test(text)) return 'vaccine';
             if (/ตรวจสุขภาพ|health checkup/.test(text)) return 'checkup';
             if (/ป่วย|consultation|sick/.test(text)) return 'consultation';
             if (/ทำหมัน|neuter|spay/.test(text)) return 'neuter';
-            if (/อาบน้ำ|ตัดขน|grooming|boarding/.test(text)) return 'grooming';
+            if (/อาบน้ำ|ตัดขน|grooming|boarding|bath|haircut/.test(text)) return 'grooming';
             return 'other';
         }
     }
@@ -199,14 +245,17 @@ exports.getPetDetail = async (req, res) => {
             .filter((v) => v.weight !== null && v.weight !== undefined && Number(v.weight) > 0)
             .map((v) => ({ date: v.visit_date, weight: Number(v.weight) }));
 
+        // 2. นำน้ำหนักแรกรับในตาราง pets มาใส่เป็นจุดเริ่มต้น (ถ้ายังไม่มีบันทึกในวันลงทะเบียน)
         if (pet.weight !== null && pet.weight !== undefined && Number(pet.weight) > 0) {
-            const initialDate = pet.created_at ? pet.created_at.slice(0, 10) : '2026-01-01';
-            const isDuplicateDate = weightTrend.some(item => item.date === initialDate);
-            if (!isDuplicateDate) {
+            const initialDate = pet.created_at ? pet.created_at.slice(0, 10) : '2025-01-01';
+
+            const hasSameDate = weightTrend.some(item => item.date === initialDate);
+            if (!hasSameDate) {
                 weightTrend.push({ date: initialDate, weight: Number(pet.weight) });
             }
         }
 
+        // 3. เรียงลำดับตามวันที่จาก อดีต -> ปัจจุบัน
         weightTrend.sort((a, b) => a.date.localeCompare(b.date));
 
         return res.status(200).json({

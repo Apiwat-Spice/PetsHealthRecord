@@ -34,7 +34,6 @@ export default function PetQrTab({ pet, onResetQr, isResettingQr }) {
       const response = await fetch(`${API_URL}/pets/showqr/${pet.pet_id}`);
       if (response.ok) {
         const data = await response.json();
-        // ดึงค่าจริงจากดาต้าเบสมาเปิดค้างไว้ตามสถานะ True/False
         setSettings({
           Pet_name: Boolean(data.Pet_name),
           Animal_type: Boolean(data.Animal_type),
@@ -55,7 +54,7 @@ export default function PetQrTab({ pet, onResetQr, isResettingQr }) {
   };
 
   const handleToggle = (field) => {
-    setSettings(prev => ({ ...prev, [field]: !prev[field] }));
+    setSettings((prev) => ({ ...prev, [field]: !prev[field] }));
   };
 
   const handleSaveSettings = async () => {
@@ -113,60 +112,71 @@ export default function PetQrTab({ pet, onResetQr, isResettingQr }) {
     });
   };
 
-  // URL สำหรับลิงก์เว็บสาธารณะเมื่อสแกน QR Code  /////////////////////////////////////////////
   const publicWebUrl = `http://localhost:3001/guest/pet/${pet?.qr_code || pet?.pet_id}`;
 
   return (
-    <View style={{ paddingBottom: 30 }}>
-      {/* ส่วนแสดง QR Code */}
+    <View style={styles.container}>
+      {/* การ์ดแสดง QR Code */}
       <View style={styles.qrCardContainer}>
         <View style={styles.qrTopBar} />
         <View style={styles.qrInnerBox}>
           <QRCode
             value={publicWebUrl}
             size={180}
-            color="#1A2D3E"
+            color="#1E293B"
             backgroundColor="#FFF"
             getRef={(ref) => (qrSvgRef.current = ref)}
           />
         </View>
         <Text style={styles.qrPetName}>{pet?.pet_name}</Text>
-        <Text style={styles.qrSubText}>สแกนเพื่อดูข้อมูลฉุกเฉิน</Text>
+        <Text style={styles.qrSubText}>สแกนเพื่อดูข้อมูลฉุกเฉินและข้อมูลติดต่อ</Text>
       </View>
 
-      <TouchableOpacity style={styles.saveQrBtn} onPress={handleSaveOrShareQr} activeOpacity={0.8}>
-        <Feather name="share-2" size={16} color="#FFF" style={{ marginRight: 6 }} />
+      {/* ปุ่มแชร์ / บันทึก QR Code */}
+      <TouchableOpacity style={styles.saveQrBtn} onPress={handleSaveOrShareQr} activeOpacity={0.85}>
+        <Feather name="share-2" size={18} color="#FFF" style={{ marginRight: 8 }} />
         <Text style={styles.saveQrBtnText}>บันทึกหรือแชร์ QR Code</Text>
       </TouchableOpacity>
 
-      {/* ปุ่มรีเซ็ตคิวอาร์โค้ด (สร้าง QR Code ใหม่) */}
+      {/* การ์ดรีเซ็ต QR Code */}
       <View style={styles.resetCard}>
         <View style={styles.resetTitleRow}>
-          <Feather name="refresh-cw" size={16} color="#B36B15" />
-          <Text style={styles.resetTitle}> รีเซ็ตคิวอาร์โค้ด</Text>
+          <Feather name="refresh-cw" size={16} color="#D97706" style={{ marginRight: 6 }} />
+          <Text style={styles.resetTitle}>รีเซ็ตคิวอาร์โค้ด</Text>
         </View>
-        <Text style={styles.resetSub}>สร้าง QR Code ใหม่ (โค้ดเดิมจะไม่สามารถใช้ได้อีกต่อไป)</Text>
-        <TouchableOpacity style={styles.resetActionBtn} onPress={onResetQr} disabled={isResettingQr}>
+        <Text style={styles.resetSub}>หากสร้าง QR Code ใหม่ โค้ดเดิมจะไม่สามารถนำมาสแกนดูข้อมูลได้อีกต่อไป</Text>
+        <TouchableOpacity
+          style={styles.resetActionBtn}
+          onPress={onResetQr}
+          disabled={isResettingQr}
+          activeOpacity={0.8}
+        >
           {isResettingQr ? (
-            <ActivityIndicator size="small" color="#9A3412" />
+            <ActivityIndicator size="small" color="#D97706" />
           ) : (
             <>
-              <Feather name="refresh-cw" size={14} color="#B36B15" style={{ marginRight: 6 }} />
-              <Text style={styles.resetActionBtnText}>รีเซ็ตคิวอาร์โค้ด</Text>
+              <Feather name="refresh-cw" size={14} color="#D97706" style={{ marginRight: 6 }} />
+              <Text style={styles.resetActionBtnText}>สร้าง QR Code ใหม่</Text>
             </>
           )}
         </TouchableOpacity>
       </View>
 
-      {/* ส่วนตั้งค่าข้อมูลสาธารณะ (สวิตช์ภาษาไทยเปิดค้างตามดาต้าเบส) */}
-      <Text style={styles.sectionHeaderTitle}>ข้อมูลที่แสดง สาธารณะ</Text>
+      {/* ตั้งค่าข้อมูลที่ต้องการให้แสดงผลสาธารณะ */}
+      <View style={styles.sectionHeaderRow}>
+        <Feather name="sliders" size={16} color="#20435C" style={{ marginRight: 6 }} />
+        <Text style={styles.sectionHeaderTitle}>ตั้งค่าข้อมูลที่แสดงสาธารณะ</Text>
+      </View>
 
       <View style={styles.configCard}>
         {loadingSettings ? (
-          <ActivityIndicator size="small" color="#0056D2" style={{ marginVertical: 20 }} />
+          <ActivityIndicator size="small" color="#2563EB" style={{ marginVertical: 24 }} />
         ) : (
           <>
-            <Text style={styles.groupTitle}>ข้อมูลสัตว์เลี้ยง</Text>
+            <View style={styles.groupHeader}>
+              <Feather name="heart" size={14} color="#2563EB" style={{ marginRight: 6 }} />
+              <Text style={styles.groupTitle}>ข้อมูลสัตว์เลี้ยง</Text>
+            </View>
 
             <SwitchItem label="ชื่อสัตว์เลี้ยง" value={settings.Pet_name} onToggle={() => handleToggle('Pet_name')} />
             <SwitchItem label="ชนิดสัตว์" value={settings.Animal_type} onToggle={() => handleToggle('Animal_type')} />
@@ -175,115 +185,178 @@ export default function PetQrTab({ pet, onResetQr, isResettingQr }) {
             <SwitchItem label="อายุ / วันเกิด" value={settings.birthdate} onToggle={() => handleToggle('birthdate')} />
             <SwitchItem label="ข้อควรระวัง / แพ้ยา" value={settings.detail} onToggle={() => handleToggle('detail')} />
 
-            <Text style={[styles.groupTitle, { marginTop: 15 }]}>ข้อมูลเจ้าของ</Text>
+            <View style={[styles.groupHeader, { marginTop: 18 }]}>
+              <Feather name="user" size={14} color="#2563EB" style={{ marginRight: 6 }} />
+              <Text style={styles.groupTitle}>ข้อมูลเจ้าของ</Text>
+            </View>
 
             <SwitchItem label="ชื่อ-นามสกุล" value={settings.Pet_owner_name} onToggle={() => handleToggle('Pet_owner_name')} />
             <SwitchItem label="อีเมล" value={settings.email} onToggle={() => handleToggle('email')} />
-            <SwitchItem label="เบอร์โทร" value={settings.phone} onToggle={() => handleToggle('phone')} />
+            <SwitchItem label="เบอร์โทรศัพท์" value={settings.phone} onToggle={() => handleToggle('phone')} isLast />
 
             <TouchableOpacity
               style={styles.submitConfigBtn}
               onPress={handleSaveSettings}
               disabled={savingSettings}
+              activeOpacity={0.85}
             >
               {savingSettings ? (
                 <ActivityIndicator size="small" color="#FFF" />
               ) : (
-                <Text style={styles.submitConfigBtnText}>แก้ไข / บันทึก</Text>
+                <Text style={styles.submitConfigBtnText}>บันทึกการตั้งค่า</Text>
               )}
             </TouchableOpacity>
           </>
         )}
       </View>
 
-      <Text style={styles.footerWarning}>
-        <Feather name="alert-circle" size={12} color="#E53E3E" /> หมายเหตุ : ระวังการเปิดเผยข้อมูลส่วนตัว
-      </Text>
+      {/* แถบแจ้งเตือนความปลอดภัย */}
+      <View style={styles.warningBanner}>
+        <Feather name="alert-circle" size={14} color="#DC2626" style={{ marginRight: 6 }} />
+        <Text style={styles.footerWarning}>
+          โปรดระมัดระวังการเปิดเผยข้อมูลติดต่อส่วนบุคคลสู่สาธารณะ
+        </Text>
+      </View>
     </View>
   );
 }
 
-function SwitchItem({ label, value, onToggle }) {
+function SwitchItem({ label, value, onToggle, isLast }) {
   return (
-    <View style={styles.switchRow}>
+    <View style={[styles.switchRow, isLast && styles.switchRowLast]}>
       <Text style={styles.switchLabel}>{label}</Text>
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{ false: '#D0D0D0', true: '#90CDF4' }}
-        thumbColor={value ? '#0056D2' : '#f4f3f4'}
+        trackColor={{ false: '#CBD5E1', true: '#93C5FD' }}
+        thumbColor={value ? '#2563EB' : '#FFFFFF'}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: { paddingBottom: 30 },
   qrCardContainer: {
     backgroundColor: '#FFF',
     borderRadius: 16,
     alignItems: 'center',
     paddingVertical: 24,
     paddingHorizontal: 20,
-    marginBottom: 16,
+    marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#E2EBF0',
+    borderColor: '#E2E8F0',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  qrTopBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 5, backgroundColor: '#3B82F6' },
-  qrInnerBox: { padding: 12, marginBottom: 16 },
-  qrPetName: { fontSize: 16, fontWeight: 'bold', color: '#20435C' },
-  qrSubText: { fontSize: 12, color: '#7E909E', marginTop: 4 },
+  qrTopBar: { position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: '#2563EB' },
+  qrInnerBox: {
+    padding: 14,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    marginBottom: 12,
+  },
+  qrPetName: { fontSize: 18, fontWeight: 'bold', color: '#1E293B' },
+  qrSubText: { fontSize: 12, color: '#64748B', marginTop: 4 },
 
   saveQrBtn: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 10,
-    paddingVertical: 14,
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    height: 48,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 14,
+    shadowColor: '#2563EB',
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 2,
   },
   saveQrBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 15 },
 
-  resetCard: { backgroundColor: '#FFF7ED', borderWidth: 1, borderColor: '#FED7AA', borderRadius: 12, padding: 14, marginBottom: 20 },
+  resetCard: {
+    backgroundColor: '#FFFBEB',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 18,
+  },
   resetTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
-  resetTitle: { fontSize: 14, fontWeight: 'bold', color: '#9A3412' },
-  resetSub: { fontSize: 11, color: '#C2410C', marginBottom: 10 },
+  resetTitle: { fontSize: 14, fontWeight: 'bold', color: '#B45309' },
+  resetSub: { fontSize: 12, color: '#92400E', marginBottom: 10, lineHeight: 18 },
   resetActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#FDBA74',
+    borderColor: '#FCD34D',
     borderRadius: 8,
-    paddingVertical: 8,
+    height: 38,
     backgroundColor: '#FFF',
   },
-  resetActionBtnText: { color: '#9A3412', fontWeight: 'bold', fontSize: 13 },
+  resetActionBtnText: { color: '#B45309', fontWeight: 'bold', fontSize: 13 },
 
-  sectionHeaderTitle: { fontSize: 14, fontWeight: 'bold', color: '#333', marginBottom: 10 },
+  sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  sectionHeaderTitle: { fontSize: 15, fontWeight: 'bold', color: '#20435C' },
 
   configCard: {
     backgroundColor: '#FFF',
-    borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
     borderRadius: 16,
     padding: 16,
-    marginBottom: 15,
+    marginBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  groupTitle: { fontSize: 14, fontWeight: 'bold', color: '#20435C', marginBottom: 8 },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
+  groupTitle: { fontSize: 14, fontWeight: 'bold', color: '#1E293B' },
 
-  switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  switchLabel: { fontSize: 14, color: '#333' },
+  switchRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F8FAFC',
+  },
+  switchRowLast: { borderBottomWidth: 0 },
+  switchLabel: { fontSize: 14, color: '#334155', fontWeight: '500' },
 
   submitConfigBtn: {
-    backgroundColor: '#0056D2',
-    borderRadius: 8,
-    paddingVertical: 12,
+    backgroundColor: '#2563EB',
+    borderRadius: 10,
+    height: 46,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: 18,
   },
   submitConfigBtnText: { color: '#FFF', fontWeight: 'bold', fontSize: 14 },
 
-  footerWarning: { fontSize: 11, color: '#E53E3E', textAlign: 'center', marginTop: 5 }
+  warningBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+    borderRadius: 10,
+    padding: 10,
+  },
+  footerWarning: { fontSize: 11, color: '#991B1B', fontWeight: '500' },
 });

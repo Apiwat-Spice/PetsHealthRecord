@@ -20,7 +20,6 @@ export default function ClinicScreen({ navigation, route }) {
     if (route.params?.switchTab) {
       setActiveTab(route.params.switchTab);
     }
-    // เพิ่มการรับค่าฟิลเตอร์เริ่มต้นตรงนี้
     if (route.params?.initialFilter) {
       setSelectedFilter(route.params.initialFilter);
     }
@@ -44,17 +43,14 @@ export default function ClinicScreen({ navigation, route }) {
     setRefreshing(false);
   };
 
-  // ดึงข้อมูลคลินิกเดี่ยวจาก Database โดยตรง (Clinic ID: 2)
   const fetchSingleClinic = async () => {
     try {
       const TARGET_CLINIC_ID = 2;
       const response = await fetch(`${API_URL}/clinics/${TARGET_CLINIC_ID}`);
       if (response.ok) {
         const data = await response.json();
-        // เอาข้อมูลที่ได้ใส่ลงอาเรย์ เพื่อส่งต่อให้ ClinicsTab แสดงผล
         setClinics([data]);
       } else {
-        console.log("Failed to fetch clinic from DB");
         setClinics([]);
       }
     } catch (error) {
@@ -90,22 +86,33 @@ export default function ClinicScreen({ navigation, route }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>ข้อมูลคลินิก</Text>
+        <Text style={styles.headerTitle}>ข้อมูลคลินิกและนัดหมาย</Text>
       </View>
 
+      {/* Segmented Tab */}
       <View style={styles.tabContainer}>
-        <TouchableOpacity style={[styles.tab, activeTab === 'clinics' && styles.activeTab]} onPress={() => setActiveTab('clinics')}>
-          <Text style={[styles.tabText, activeTab === 'clinics' && styles.activeTabText]}>คลินิก</Text>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'clinics' && styles.activeTab]}
+          onPress={() => setActiveTab('clinics')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabText, activeTab === 'clinics' && styles.activeTabText]}>ข้อมูลคลินิก</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.tab, activeTab === 'history' && styles.activeTab]} onPress={() => setActiveTab('history')}>
-          <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>ประวัติการนัด</Text>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'history' && styles.activeTab]}
+          onPress={() => setActiveTab('history')}
+          activeOpacity={0.8}
+        >
+          <Text style={[styles.tabText, activeTab === 'history' && styles.activeTabText]}>ประวัติการนัดหมาย</Text>
         </TouchableOpacity>
       </View>
 
       {loading && !refreshing ? (
-        <ActivityIndicator size="large" color="#0056D2" style={{ marginTop: 50 }} />
+        <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
       ) : activeTab === 'clinics' ? (
         <ClinicsTab
           clinics={clinics}
@@ -129,12 +136,32 @@ export default function ClinicScreen({ navigation, route }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EAF4F4' },
-  header: { backgroundColor: '#0056D2', padding: 20, paddingTop: 20, alignItems: 'center' },
-  headerTitle: { color: '#FFF', fontSize: 22, fontWeight: 'bold' },
-  tabContainer: { flexDirection: 'row', marginHorizontal: 20, marginTop: 15, marginBottom: 10, backgroundColor: '#DFEAEA', borderRadius: 25, padding: 5 },
-  tab: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 20 },
-  activeTab: { backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2 },
-  tabText: { fontSize: 16, color: '#666', fontWeight: 'bold' },
-  activeTabText: { color: '#0056D2' }
+  container: { flex: 1, backgroundColor: '#F5F8FA' },
+  header: {
+    backgroundColor: '#20435C',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  headerTitle: { color: '#FFF', fontSize: 18, fontWeight: 'bold' },
+
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#E2E8F0',
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    borderRadius: 25,
+    padding: 3,
+  },
+  tab: { flex: 1, paddingVertical: 8, alignItems: 'center', borderRadius: 20 },
+  activeTab: {
+    backgroundColor: '#FFFFFF',
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  tabText: { fontSize: 13, color: '#64748B', fontWeight: 'bold' },
+  activeTabText: { color: '#20435C' }
 });

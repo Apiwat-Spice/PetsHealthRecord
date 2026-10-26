@@ -12,7 +12,6 @@ import PetHealthTab from './PetHealthTab';
 import PetQrTab from './PetQrTab';
 
 export default function PetDetail({ navigation, route }) {
-  // 🟢 รองรับการรับค่าทั้งแบบส่ง pet มาทั้งก้อน หรือส่งมาแค่ petId
   const routeParams = route.params || {};
   const passedPet = routeParams.pet;
   const targetPetId = routeParams.petId || passedPet?.pet_id;
@@ -21,8 +20,8 @@ export default function PetDetail({ navigation, route }) {
   const [upcoming, setUpcoming] = useState([]);
   const [history, setHistory] = useState([]);
   const [weightTrend, setWeightTrend] = useState([]);
-  const [stats, setStats] = useState({ checkup: 0, vaccine: 0, treatment: 0, other: 0 });
-  const [isLoading, setIsLoading] = useState(!passedPet); // ถ้าไม่มีข้อมูล pet เริ่มต้น ให้โหลดก่อน
+  const [stats, setStats] = useState({ checkup: 0, vaccine: 0, consultation: 0, neuter: 0, grooming: 0, other: 0 });
+  const [isLoading, setIsLoading] = useState(!passedPet);
 
   const initialTab = routeParams.initialTab || 'general';
   const [activeTab, setActiveTab] = useState(initialTab);
@@ -30,7 +29,7 @@ export default function PetDetail({ navigation, route }) {
   const [isResettingQr, setIsResettingQr] = useState(false);
 
   const fetchPetDetail = useCallback(async () => {
-    if (!targetPetId) return; // ถ้าไม่มีรหัสสัตว์เลี้ยง ให้หยุดทำงาน
+    if (!targetPetId) return;
 
     try {
       const ownerString = await SecureStore.getItemAsync('pet_owners');
@@ -38,7 +37,6 @@ export default function PetDetail({ navigation, route }) {
       const owner = JSON.parse(ownerString);
       const ownerId = owner.pet_owner_id ?? owner.pet_owners_id;
 
-      // 🟢 ใช้ targetPetId ในการยิง API
       const response = await fetch(`${API_URL}/pets/detail/${targetPetId}?ownerId=${ownerId}`);
       if (response.ok) {
         const data = await response.json();
@@ -46,7 +44,7 @@ export default function PetDetail({ navigation, route }) {
         setUpcoming(data.upcoming || []);
         setHistory(data.history || []);
         setWeightTrend(data.weightTrend || []);
-        setStats(data.stats || { checkup: 0, vaccine: 0, treatment: 0, other: 0 });
+        setStats(data.stats || { checkup: 0, vaccine: 0, consultation: 0, neuter: 0, grooming: 0, other: 0 });
       }
     } catch (error) {
       console.log('Fetch Pet Detail Error:', error);
@@ -57,7 +55,12 @@ export default function PetDetail({ navigation, route }) {
 
   useEffect(() => {
     fetchPetDetail();
-  }, [fetchPetDetail])
+  }, [fetchPetDetail]);
+
+  // 🟢 คำนวณหาน้ำหนักล่าสุดจากประวัติการเข้ารับบริการ (ถ้าวัดไว้) หากไม่มีจะใช้ค่าน้ำหนักจากโปรไฟล์เดิม
+  const latestRecordedWeight = history?.find(
+    (h) => h.weight !== null && h.weight !== undefined && Number(h.weight) > 0
+  )?.weight ?? pet?.weight;
 
   const handlePickAndUploadImage = async () => {
     let result = await ImagePicker.launchImageLibraryAsync({
@@ -165,6 +168,7 @@ export default function PetDetail({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Feather name="arrow-left" size={24} color="#FFF" />
@@ -173,6 +177,7 @@ export default function PetDetail({ navigation, route }) {
         <View style={{ width: 24 }} />
       </View>
 
+      {/* Navigation Tabs */}
       <View style={styles.tabContainer}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'general' && styles.activeTab]}
@@ -202,15 +207,17 @@ export default function PetDetail({ navigation, route }) {
         </TouchableOpacity>
       </View>
 
+      {/* 🟢 ใช้ ScrollView เดียวที่ส่วนกลางในการควบคุม เลื่อนลื่นไหลไม่มีโหว่ */}
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {activeTab === 'general' && (
           <PetGeneralTab
             pet={pet}
+            latestWeight={latestRecordedWeight}
             cautions={cautions}
             upcoming={upcoming}
             uploadingImage={uploadingImage}
             onPickImage={handlePickAndUploadImage}
-            navigation={navigation} // ส่ง navigation ไปให้กดคลิกการ์ดนัดหมายได้
+            navigation={navigation}
           />
         )}
 
@@ -219,7 +226,7 @@ export default function PetDetail({ navigation, route }) {
             weightTrend={weightTrend}
             stats={stats}
             history={history}
-            navigation={navigation} // ส่ง navigation ไปเพื่อให้กดดูรายละเอียดการรักษาได้
+            navigation={navigation}
           />
         )}
 
@@ -230,16 +237,14 @@ export default function PetDetail({ navigation, route }) {
             isResettingQr={isResettingQr}
           />
         )}
-
-        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#EDF3F6' },
-  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  container: { flex: 1, backgroundColor: '#F5F8FA' },
+  loaderContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F5F8FA' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -252,9 +257,9 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#DFE7EC',
+    backgroundColor: '#E2E8F0',
     marginHorizontal: 16,
-    marginTop: 14,
+    marginTop: 12,
     marginBottom: 8,
     borderRadius: 25,
     padding: 3,
@@ -267,7 +272,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-  tabText: { fontSize: 13, color: '#688092', fontWeight: 'bold' },
+  tabText: { fontSize: 13, color: '#64748B', fontWeight: 'bold' },
   activeTabText: { color: '#20435C' },
-  content: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 60 },
+  content: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 40 },
 });

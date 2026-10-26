@@ -13,9 +13,9 @@ export default function Pets({ navigation }) {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [sortOption, setSortOption] = useState('newest'); // 'newest', 'name', 'age_desc', 'age_asc'
   const hasLoaded = useRef(false);
 
-  // ดึงสัตว์เลี้ยงของเจ้าของที่ล็อกอินอยู่ (ข้อมูลถูกสร้างโดยคลินิกในระบบ)
   const loadPets = useCallback(async ({ silent = false } = {}) => {
     try {
       if (!silent) setIsLoading(true);
@@ -37,7 +37,6 @@ export default function Pets({ navigation }) {
       try {
         result = JSON.parse(responseText);
       } catch (e) {
-        console.log('❌ ข้อความจาก Server (ไม่ใช่ JSON):', responseText);
         throw new Error(`เซิร์ฟเวอร์ตอบกลับไม่ถูกต้อง (Status: ${response.status})`);
       }
 
@@ -52,7 +51,6 @@ export default function Pets({ navigation }) {
     }
   }, []);
 
-  // โหลดข้อมูลใหม่ทุกครั้งที่กลับมาหน้านี้
   useFocusEffect(
     useCallback(() => {
       loadPets({ silent: hasLoaded.current });
@@ -65,20 +63,74 @@ export default function Pets({ navigation }) {
     loadPets({ silent: true });
   };
 
+  //คำนวณเรียงลำดับข้อมูลตาม Sort Option ที่เลือก
+  const getSortedPets = () => {
+    let list = [...pets];
+    if (sortOption === 'name') {
+      list.sort((a, b) => (a.pet_name || '').localeCompare(b.pet_name || '', 'th'));
+    } else if (sortOption === 'age_desc') {
+      // อายุมาก -> น้อย (วันเกิดเก่าที่สุดก่อน)
+      list.sort((a, b) => {
+        const tA = a.birthdate ? new Date(a.birthdate).getTime() : 0;
+        const tB = b.birthdate ? new Date(b.birthdate).getTime() : 0;
+        return tA - tB;
+      });
+    } else if (sortOption === 'age_asc') {
+      // อายุน้อย -> มาก (วันเกิดใหม่ที่สุดก่อน)
+      list.sort((a, b) => {
+        const tA = a.birthdate ? new Date(a.birthdate).getTime() : 0;
+        const tB = b.birthdate ? new Date(b.birthdate).getTime() : 0;
+        return tB - tA;
+      });
+    } else {
+      // วันที่เพิ่มล่าสุด (Default)
+      list.sort((a, b) => (b.pet_id || 0) - (a.pet_id || 0));
+    }
+    return list;
+  };
+
+  const sortChips = [
+    { key: 'newest', label: 'ล่าสุด' },
+    { key: 'name', label: 'ชื่อ (ก-ฮ)' },
+    { key: 'age_desc', label: 'อายุมาก → น้อย' },
+    { key: 'age_asc', label: 'อายุน้อย → มาก' },
+  ];
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="dark" />
 
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2A4B6A']} />}
-      >
+      <View style={styles.headerBox}>
         <Text style={styles.title}>สัตว์เลี้ยงของคุณ</Text>
         <Text style={styles.subtitle}>แตะที่การ์ดเพื่อดูรายละเอียดและประวัติสุขภาพ</Text>
 
+        {/*แถบปุ่ม Sort Chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sortContainer}>
+          {sortChips.map((chip) => {
+            const isActive = sortOption === chip.key;
+            return (
+              <TouchableOpacity
+                key={chip.key}
+                style={[styles.sortChip, isActive && styles.sortChipActive]}
+                onPress={() => setSortOption(chip.key)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.sortChipText, isActive && styles.sortChipTextActive]}>
+                  {chip.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} />}
+      >
         {isLoading ? (
-          <ActivityIndicator size="large" color="#2A4B6A" style={{ marginTop: 50 }} />
+          <ActivityIndicator size="large" color="#2563EB" style={{ marginTop: 50 }} />
         ) : pets.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Text style={styles.emptyEmoji}>🐾</Text>
@@ -88,7 +140,7 @@ export default function Pets({ navigation }) {
             </Text>
           </View>
         ) : (
-          pets.map((pet) => {
+          getSortedPets().map((pet) => {
             const weightText = formatWeight(pet.weight);
             return (
               <TouchableOpacity
@@ -113,12 +165,12 @@ export default function Pets({ navigation }) {
                   <View style={styles.chipRow}>
                     {pet.birthdate ? (
                       <View style={[styles.chip, styles.chipBlue]}>
-                        <Text style={styles.chipText}>{calcAge(pet.birthdate, true)}</Text>
+                        <Text style={styles.chipBlueText}>{calcAge(pet.birthdate, true)}</Text>
                       </View>
                     ) : null}
                     {weightText !== '-' ? (
                       <View style={[styles.chip, styles.chipPurple]}>
-                        <Text style={styles.chipText}>{weightText}</Text>
+                        <Text style={styles.chipPurpleText}>{weightText}</Text>
                       </View>
                     ) : null}
                     {pet.verified ? (
@@ -134,7 +186,7 @@ export default function Pets({ navigation }) {
                 </View>
 
                 <View style={styles.arrowBtn}>
-                  <Feather name="arrow-right" size={16} color="#FFFFFF" />
+                  <Feather name="chevron-right" size={18} color="#2563EB" />
                 </View>
               </TouchableOpacity>
             );
@@ -146,28 +198,44 @@ export default function Pets({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F4F7F6' },
-  content: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 },
+  container: { flex: 1, backgroundColor: '#F5F8FA' },
+  headerBox: { paddingHorizontal: 16, paddingTop: 14, paddingBottom: 6 },
+  title: { fontSize: 22, fontWeight: 'bold', color: '#20435C' },
+  subtitle: { fontSize: 13, color: '#64748B', marginTop: 2, marginBottom: 12 },
 
-  title: { fontSize: 24, fontWeight: 'bold', color: '#4F7396' },
-  subtitle: { fontSize: 13, color: '#8FA3B5', marginTop: 4, marginBottom: 20 },
+  sortContainer: { flexDirection: 'row', marginBottom: 6 },
+  sortChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#E2E8F0',
+    marginRight: 8,
+  },
+  sortChipActive: { backgroundColor: '#2563EB' },
+  sortChipText: { fontSize: 12, color: '#475569', fontWeight: '600' },
+  sortChipTextActive: { color: '#FFFFFF', fontWeight: 'bold' },
 
+  content: { paddingHorizontal: 16, paddingTop: 6, paddingBottom: 60 },
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#EFFAFF',
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: '#C9DCE6',
-    borderRadius: 12,
+    borderColor: '#E2E8F0',
+    borderRadius: 14,
     padding: 14,
-    marginBottom: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
   },
   avatarWrap: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    backgroundColor: '#DCEBF5',
-    borderWidth: 3,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 2,
     borderColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
@@ -175,34 +243,35 @@ const styles = StyleSheet.create({
     marginRight: 14,
   },
   avatarImage: { width: '100%', height: '100%' },
-  avatarEmoji: { fontSize: 34 },
+  avatarEmoji: { fontSize: 32 },
 
   info: { flex: 1, marginRight: 8 },
-  petName: { fontSize: 18, fontWeight: 'bold', color: '#1F2D3A' },
-  petType: { fontSize: 13, color: '#7A8B98', marginTop: 1 },
-  petBreed: { fontSize: 13, color: '#4F7396', marginTop: 1 },
+  petName: { fontSize: 17, fontWeight: 'bold', color: '#1E293B' },
+  petType: { fontSize: 12, color: '#64748B', marginTop: 1 },
+  petBreed: { fontSize: 12, color: '#20435C', fontWeight: '500', marginTop: 1 },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8 },
-  chip: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: 8, marginRight: 6, marginBottom: 4 },
-  chipText: { color: '#FFFFFF', fontSize: 11, fontWeight: 'bold' },
-  chipBlue: { backgroundColor: '#2D9CDB' },
-  chipPurple: { backgroundColor: '#7C8DB5' },
-  chipGreen: { backgroundColor: '#D6F2E0' },
-  chipGreenText: { color: '#2E9E5B', fontSize: 11, fontWeight: 'bold' },
-  chipOrange: { backgroundColor: '#FDEBCB' },
-  chipOrangeText: { color: '#C77A14', fontSize: 11, fontWeight: 'bold' },
+  chip: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, marginRight: 6, marginBottom: 4 },
+  chipBlue: { backgroundColor: '#EFF6FF' },
+  chipBlueText: { color: '#2563EB', fontSize: 11, fontWeight: 'bold' },
+  chipPurple: { backgroundColor: '#F1F5F9' },
+  chipPurpleText: { color: '#475569', fontSize: 11, fontWeight: 'bold' },
+  chipGreen: { backgroundColor: '#DCFCE7' },
+  chipGreenText: { color: '#16A34A', fontSize: 11, fontWeight: 'bold' },
+  chipOrange: { backgroundColor: '#FEF3C7' },
+  chipOrangeText: { color: '#D97706', fontSize: 11, fontWeight: 'bold' },
 
   arrowBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#0F5CC0',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#EFF6FF',
     alignItems: 'center',
     justifyContent: 'center',
   },
 
   emptyContainer: { alignItems: 'center', marginTop: 60, paddingHorizontal: 20 },
   emptyEmoji: { fontSize: 48, marginBottom: 12 },
-  emptyText: { fontSize: 17, fontWeight: 'bold', color: '#7A8B98' },
-  emptySubText: { fontSize: 13, color: '#A5B2BC', marginTop: 8, textAlign: 'center', lineHeight: 20 },
+  emptyText: { fontSize: 16, fontWeight: 'bold', color: '#64748B' },
+  emptySubText: { fontSize: 13, color: '#94A3B8', marginTop: 6, textAlign: 'center', lineHeight: 20 },
 });
