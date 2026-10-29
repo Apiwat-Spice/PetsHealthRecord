@@ -1,6 +1,8 @@
-const supabase = require("../config/supabase"); // ปรับ path ตามไฟล์เชื่อมต่อ Supabase ของคุณ
+const supabase = require("../config/supabase");
 
-// ดึงประวัติการรักษารวมทั้งหมดของเจ้าของสัตว์เลี้ยง (เรียงจากล่าสุดไปเก่าสุด)
+/**
+ * ดึงประวัติการรักษารวมทั้งหมดของเจ้าของสัตว์เลี้ยง (เรียงจากล่าสุดไปเก่าสุด)
+ */
 exports.getVisitHistoryByOwnerId = async (req, res) => {
   try {
     const { ownerId } = req.params;
@@ -23,6 +25,10 @@ exports.getVisitHistoryByOwnerId = async (req, res) => {
             pet_id,
             pet_name,
             pet_owner_id
+          ),
+          vets (
+            first_name,
+            last_name
           )
         ),
         clinic_staff (
@@ -30,7 +36,6 @@ exports.getVisitHistoryByOwnerId = async (req, res) => {
           last_name
         )
       `)
-      // 🟢 ตรวจสอบตรงนี้: หากในตาราง pets ของคุณใช้ชื่อ pet_owner_id ให้เปลี่ยนตรงนี้ให้ตรงกัน
       .eq("appointments.pets.pet_owner_id", ownerId)
       .order("visit_date", { ascending: false })
       .order("visit_time", { ascending: false });
@@ -50,9 +55,14 @@ exports.getVisitHistoryByOwnerId = async (req, res) => {
       treatment: item.treatment,
       symptoms: item.symptoms,
       note: item.note,
-      vet_name: item.clinic_staff
-        ? `น.สพ. ${item.clinic_staff.first_name} ${item.clinic_staff.last_name || ''}`
-        : 'คลินิกรักษาสัตว์'
+      // ชื่อสัตวแพทย์ผู้ตรวจ (แสดงชื่อ-นามสกุลตรงๆ ไม่ใส่คำนำหน้าระบุเพศ)
+      vet_name: item.appointments?.vets
+        ? `${item.appointments.vets.first_name} ${item.appointments.vets.last_name || ''}`.trim()
+        : 'ไม่ระบุสัตวแพทย์',
+      // ชื่อเจ้าหน้าที่ผู้บันทึกข้อมูล
+      staff_name: item.clinic_staff
+        ? `${item.clinic_staff.first_name} ${item.clinic_staff.last_name || ''}`.trim()
+        : 'เจ้าหน้าที่คลินิก'
     }));
 
     return res.status(200).json(formattedData);
@@ -61,7 +71,10 @@ exports.getVisitHistoryByOwnerId = async (req, res) => {
     return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
   }
 };
-// ดึงรายละเอียดประวัติการรักษาตาม visit_id (รวมข้อมูลจาก visit_records, appointments และ vets)
+
+/**
+ * ดึงรายละเอียดประวัติการรักษาตาม visit_id (รวมข้อมูลจาก visit_records, appointments, vets และ clinic_staff)
+ */
 exports.getVisitDetailById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -98,7 +111,6 @@ exports.getVisitDetailById = async (req, res) => {
       return res.status(404).json({ message: "ไม่พบข้อมูลประวัติการรักษา" });
     }
 
-    // จัดรูปทรงข้อมูลให้ใช้งานง่ายบนแอปพลิเคชัน
     const formattedData = {
       visit_id: data.visit_id,
       visit_date: data.visit_date,
@@ -110,8 +122,12 @@ exports.getVisitDetailById = async (req, res) => {
       note: data.note,
       title: data.appointments?.title,
       type: data.appointments?.type,
-      vets: data.appointments?.vets,
-      clinic_staff: data.clinic_staff
+      vet_name: data.appointments?.vets
+        ? `${data.appointments.vets.first_name} ${data.appointments.vets.last_name || ''}`.trim()
+        : null,
+      staff_name: data.clinic_staff
+        ? `${data.clinic_staff.first_name} ${data.clinic_staff.last_name || ''}`.trim()
+        : null
     };
 
     return res.status(200).json(formattedData);

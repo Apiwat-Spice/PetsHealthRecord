@@ -1,6 +1,8 @@
 const supabase = require("../config/supabase");
 
-// 1. สร้างการนัดหมาย (ไม่ต้องใช้ clinic_id แล้ว)
+/**
+ * สร้างคำขอนัดหมายใหม่
+ */
 exports.bookAppointment = async (req, res) => {
     try {
         const { pet_id, appointment_date, appointment_time, type, title, detail, status } = req.body;
@@ -24,13 +26,15 @@ exports.bookAppointment = async (req, res) => {
     }
 };
 
-// 2. ดึงประวัติการนัดหมายทั้งหมดของสัตว์เลี้ยง แล้วแปะชื่อคลินิกที่ล็อกไว้
+/**
+ * ดึงประวัติการนัดหมายทั้งหมดของสัตว์เลี้ยงของเจ้าของ
+ */
 exports.getHistory = async (req, res) => {
     try {
         const { ownerId } = req.params;
         if (!ownerId) return res.status(400).json({ message: "ไม่พบรหัสเจ้าของสัตว์เลี้ยง" });
 
-        const FIXED_CLINIC_ID = 2; // รหัสคลินิกที่ต้องการล็อกชื่อ
+        const FIXED_CLINIC_ID = 2;
 
         const { data: pets, error: petsError } = await supabase
             .from("pets")
@@ -42,7 +46,6 @@ exports.getHistory = async (req, res) => {
 
         const petIds = pets.map(pet => pet.pet_id);
 
-        // ดึงข้อมูลการนัดหมายทั้งหมดของสัตว์เลี้ยงตัวนี้ (ไม่กรอง clinic_id)
         const { data: appointments, error } = await supabase
             .from("appointments")
             .select("*, pets(pet_name, animal_type)")
@@ -52,19 +55,18 @@ exports.getHistory = async (req, res) => {
 
         if (error) throw error;
 
-        // ดึงชื่อคลินิกที่ล็อกไว้ (เช่น คลินิก ID 2) มาเตรียมแปะ
         const { data: clinicData } = await supabase
             .from("clinics")
-            .select("clinic_name")
+            .select("clinic_name, phone")
             .eq("clinic_id", FIXED_CLINIC_ID)
             .single();
 
-        const clinicName = clinicData?.clinic_name || 'คลินิกรักษาสัตว์';
-
-        // เติมชื่อคลินิกที่ล็อกไว้เข้าไปในทุก item ของประวัติที่ดึงมาได้
         const enrichedData = appointments.map(item => ({
             ...item,
-            clinics: { clinic_name: clinicName }
+            clinics: {
+                clinic_name: clinicData?.clinic_name || 'คลินิกรักษาสัตว์',
+                phone: clinicData?.phone || ''
+            }
         }));
 
         return res.status(200).json(enrichedData);
@@ -74,11 +76,13 @@ exports.getHistory = async (req, res) => {
     }
 };
 
-// 3. ดึงรายละเอียดนัดหมายตาม ID พร้อมแปะชื่อคลินิกที่ล็อกไว้
+/**
+ * ดึงรายละเอียดการนัดหมายตามรหัสการนัดหมาย (ID)
+ */
 exports.getAppointmentById = async (req, res) => {
     try {
         const { id } = req.params;
-        const FIXED_CLINIC_ID = 2; //รหัสคลินิกที่ล็อกไว้
+        const FIXED_CLINIC_ID = 2;
 
         const { data: appointment, error: appError } = await supabase
             .from("appointments")
@@ -94,14 +98,16 @@ exports.getAppointmentById = async (req, res) => {
         if (appError) throw appError;
         if (!appointment) return res.status(404).json({ message: "ไม่พบข้อมูลการนัดหมายนี้" });
 
-        //ดึงชื่อคลินิกที่ล็อกไว้มาใส่เพิ่ม
         const { data: clinicData } = await supabase
             .from("clinics")
-            .select("clinic_name")
+            .select("clinic_name, phone")
             .eq("clinic_id", FIXED_CLINIC_ID)
             .single();
 
-        appointment.clinics = { clinic_name: clinicData?.clinic_name || 'คลินิกรักษาสัตว์' };
+        appointment.clinics = {
+            clinic_name: clinicData?.clinic_name || 'คลินิกรักษาสัตว์',
+            phone: clinicData?.phone || ''
+        };
 
         return res.status(200).json(appointment);
     } catch (error) {
@@ -109,22 +115,21 @@ exports.getAppointmentById = async (req, res) => {
         return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
     }
 };
-// ดึงรายการนัดหมายตามวันที่ เพื่อนำไปเช็กเวลาที่ไม่ว่าง
+
+/**
+ * ดึงรายการนัดหมายตามคลินิกและวันที่ เพื่อเช็กช่วงเวลาคิวที่ไม่ว่าง
+ */
 exports.getAppointmentsByClinicAndDate = async (req, res) => {
     try {
         const { clinicId, date } = req.params;
-        const FIXED_CLINIC_ID = Number(clinicId) || 2;
 
-        // 1. นับจำนวนสัตวแพทย์ทั้งหมดที่มีในคลินิกนี้ (หรือในระบบ)
         const { count: vetCount, error: vetError } = await supabase
             .from("vets")
             .select("*", { count: 'exact', head: true });
 
         if (vetError) throw vetError;
-        // กำหนดจำนวนหมออย่างน้อย 1 คน (ถ้าในตาราง vets ว่างเปล่า)
         const totalVets = (vetCount && vetCount > 0) ? vetCount : 1;
 
-        // 2. ดึงรายการนัดหมายในวันที่เลือก (เฉพาะที่สถานะ pending หรือ confirmed)
         const { data: appointments, error: apptError } = await supabase
             .from("appointments")
             .select(`
@@ -147,7 +152,10 @@ exports.getAppointmentsByClinicAndDate = async (req, res) => {
         return res.status(500).json({ message: "เกิดข้อผิดพลาดในการดึงข้อมูลนัดหมาย" });
     }
 };
-//ยกเลิกการนัดหมายโดยเจ้าของสัตว์เลี้ยง
+
+/**
+ * ยกเลิกการนัดหมายโดยเจ้าของสัตว์เลี้ยง
+ */
 exports.cancelAppointment = async (req, res) => {
     try {
         const { id } = req.params;

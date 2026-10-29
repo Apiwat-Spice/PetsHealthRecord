@@ -1,6 +1,8 @@
 const supabase = require("../config/supabase");
 
-// ดึงการตั้งค่า ShowQr (ถ้ายังไม่มี ให้สร้างแถวเริ่มต้น)
+/**
+ * ดึงการตั้งค่าการแสดงผลข้อมูลบน QR Code ของสัตว์เลี้ยง (สร้างค่าเริ่มต้นหากยังไม่มี)
+ */
 exports.getShowQrSettings = async (req, res) => {
     try {
         const petId = Number(req.params.petId);
@@ -14,7 +16,6 @@ exports.getShowQrSettings = async (req, res) => {
 
         if (error) throw error;
 
-        // ถ้ายังไม่มีข้อมูลในตาราง ShowQr ให้สร้างค่าเริ่มต้นเป็น false ทั้งหมด
         if (!data) {
             const { data: newRow, error: insertError } = await supabase
                 .from("ShowQr")
@@ -33,16 +34,16 @@ exports.getShowQrSettings = async (req, res) => {
     }
 };
 
-// อัปเดตสถานะเปิด/ปิดฟิลด์ต่างๆ ของ ShowQr
+/**
+ * อัปเดตสถานะการแสดง/ซ่อนข้อมูลบน QR Code ของสัตว์เลี้ยง
+ */
 exports.updateShowQrSettings = async (req, res) => {
     try {
-        // เปลี่ยนจาก req.params.pet_id ให้ตรงกับ Route ที่เป็น :petId
         const petId = Number(req.params.petId);
-        const updateFields = req.body; 
+        const updateFields = req.body;
 
         if (!petId) return res.status(400).json({ message: "ไม่พบรหัสสัตว์เลี้ยง" });
 
-        // อัปเดตข้อมูลลงในตาราง ShowQr โดยอ้างอิงจาก pet_id
         const { data, error } = await supabase
             .from("ShowQr")
             .update(updateFields)

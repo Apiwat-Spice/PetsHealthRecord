@@ -3,7 +3,9 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const sendOTP = require("../utils/sendOTP");
 
-// 1. เช็กอีเมล
+/**
+ * ตรวจสอบการมีอยู่ของอีเมลและสถานะการตั้งรหัสผ่าน
+ */
 exports.checkEmail = async (req, res) => {
     try {
         const { email } = req.body;
@@ -18,7 +20,9 @@ exports.checkEmail = async (req, res) => {
     }
 };
 
-// 2. ขอ OTP (สำหรับคนที่ยังไม่มีรหัส)
+/**
+ * ส่งรหัส OTP ไปยังอีเมลเพื่อยืนยันตัวตน
+ */
 exports.requestOTP = async (req, res) => {
     try {
         const { email } = req.body;
@@ -37,7 +41,9 @@ exports.requestOTP = async (req, res) => {
     }
 };
 
-// 3. ยืนยัน OTP (ผ่านแล้วให้แอปพาไปหน้าตั้งรหัสผ่าน)
+/**
+ * ยืนยันความถูกต้องและความสมบูรณ์ของรหัส OTP
+ */
 exports.verifyOTP = async (req, res) => {
     try {
         const { email, otp } = req.body;
@@ -59,7 +65,9 @@ exports.verifyOTP = async (req, res) => {
     }
 };
 
-// 4. ตั้งรหัสผ่านใหม่ (หลังจากผ่าน OTP แล้วแจก Token เลย)
+/**
+ * สร้างรหัสผ่านใหม่สำหรับผู้ใช้ใหม่หลังผ่าน OTP และเข้าสู่ระบบทันที
+ */
 exports.createPassword = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -86,7 +94,9 @@ exports.createPassword = async (req, res) => {
     }
 };
 
-// 5. ล็อกอินด้วยรหัสผ่านปกติ
+/**
+ * ตรวจสอบข้อมูลเข้าสู่ระบบด้วยอีเมลและรหัสผ่าน
+ */
 exports.loginWithPassword = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -109,19 +119,20 @@ exports.loginWithPassword = async (req, res) => {
         return res.status(500).json({ message: "เกิดข้อผิดพลาด" });
     }
 };
-// 6. เปลี่ยนรหัสผ่านใหม่ (สำหรับคนที่ผ่านการยืนยัน OTP แล้ว)
+
+/**
+ * เปลี่ยนรหัสผ่านใหม่ (สำหรับผู้ใช้งานที่ผ่านการยืนยันตัวตน)
+ */
 exports.changePassword = async (req, res) => {
     try {
         const { email, password } = req.body;
         const { data: user } = await supabase.from("users").select("*").eq("email", email).single();
-        
+
         if (!user) return res.status(404).json({ message: "ไม่พบผู้ใช้งาน" });
 
-        // เข้ารหัสผ่านใหม่
         const salt = await bcrypt.genSalt(10);
         const hashed = await bcrypt.hash(password, salt);
 
-        // อัปเดตลง Database
         await supabase.from("users").update({ password_hash: hashed }).eq("user_id", user.user_id);
 
         return res.status(200).json({ message: "เปลี่ยนรหัสผ่านสำเร็จ" });

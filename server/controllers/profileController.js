@@ -1,8 +1,11 @@
 const supabase = require("../config/supabase");
 
+/**
+ * ดึงข้อมูลรายละเอียดโปรไฟล์ส่วนตัวของเจ้าของสัตว์เลี้ยง
+ */
 exports.getProfile = async (req, res) => {
     try {
-        const { id } = req.params; // pet_owner_id
+        const { id } = req.params;
         const { data, error } = await supabase
             .from('pet_owners')
             .select('*')
@@ -19,6 +22,9 @@ exports.getProfile = async (req, res) => {
     }
 };
 
+/**
+ * อัปเดตข้อมูลรายละเอียดโปรไฟล์ส่วนตัวและรูปภาพของเจ้าของสัตว์เลี้ยง
+ */
 exports.updateProfile = async (req, res) => {
     try {
         const { id } = req.params;

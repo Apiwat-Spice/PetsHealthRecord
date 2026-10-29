@@ -1,18 +1,19 @@
-const supabase = require("../config/supabase"); // ดึงการเชื่อมต่อ Supabase มาใช้
-
+const supabase = require("../config/supabase");
 const cloudinary = require("cloudinary").v2;
-// ตั้งค่า Cloudinary ด้วยข้อมูลจาก .env
+
 cloudinary.config({
     cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
+/**
+ * ดึงรายการสัตว์เลี้ยงทั้งหมดตามรหัสเจ้าของสัตว์เลี้ยง
+ */
 exports.getPetsByOwnerId = async (req, res) => {
     try {
         const ownerId = req.params.ownerId;
 
-        // ค้นหาสัตว์เลี้ยงที่ pet_owner_id ตรงกับคนที่ล็อกอิน
         const { data, error } = await supabase
             .from("pets")
             .select("*")
@@ -26,13 +27,13 @@ exports.getPetsByOwnerId = async (req, res) => {
     }
 };
 
-// ในไฟล์ petController.js
-
+/**
+ * ดึงรายการสัตว์เลี้ยงพร้อมดึงค่าน้ำหนักล่าสุดจากประวัติการตรวจรักษามาอัปเดตให้อัตโนมัติ
+ */
 exports.getPetsByOwner = async (req, res) => {
     try {
         const { owner_id } = req.params;
 
-        // 1. ดึงข้อมูลสัตว์เลี้ยงทั้งหมดของเจ้าของ
         const { data: pets, error } = await supabase
             .from("pets")
             .select("*")
@@ -48,7 +49,6 @@ exports.getPetsByOwner = async (req, res) => {
             return res.status(200).json({ pets: [] });
         }
 
-        // 2. ดึงค่าน้ำหนักล่าสุดจากประวัติการรับบริการ (visit_records) ของสัตว์เลี้ยงแต่ละตัว
         const petIds = pets.map(p => p.pet_id);
         const { data: appts } = await supabase
             .from("appointments")
@@ -78,7 +78,6 @@ exports.getPetsByOwner = async (req, res) => {
             }
         }
 
-        // 3. สลับใช้น้ำหนักล่าสุดจากการตรวจรักษา (ถ้าไม่มีจะใช้ค่าน้ำหนักเดิมในตาราง pets)
         const updatedPets = pets.map(p => ({
             ...p,
             weight: latestWeightMap[p.pet_id] !== undefined ? latestWeightMap[p.pet_id] : p.weight
@@ -92,17 +91,22 @@ exports.getPetsByOwner = async (req, res) => {
     }
 };
 
-// ส่วนของแอปเจ้าของสัตว์เลี้ยง: รายละเอียด / ประวัติสุขภาพ / แก้ไขโปรไฟล์
-
-// วันเวลาปัจจุบันตามเวลาไทย (ไม่พึ่ง timezone ของเซิร์ฟเวอร์)
+/**
+ * คำนวณเวลาปัจจุบันของประเทศไทย
+ */
 const bangkokNow = () => {
     const shifted = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString();
     return { date: shifted.slice(0, 10), time: shifted.slice(11, 19) };
 };
 
+/**
+ * รวมชื่อและนามสกุลเป็นข้อความเดียวกัน
+ */
 const fullName = (row) => (row ? `${row.first_name || ''} ${row.last_name || ''}`.trim() : '');
 
-// จัดหมวดการเข้ารับบริการ: vaccine / checkup / treatment / other
+/**
+ * จัดหมวดหมู่บริการทางการแพทย์
+ */
 const classifyVisit = (appt, visit) => {
     const title = String(appt?.title || '').trim();
     switch (title) {
@@ -128,6 +132,9 @@ const classifyVisit = (appt, visit) => {
     }
 };
 
+/**
+ * อัปโหลดรูปภาพ Buffer ไปยังระบบ Cloudinary
+ */
 const uploadBufferToCloudinary = (buffer, folderName) =>
     new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
@@ -140,14 +147,15 @@ const uploadBufferToCloudinary = (buffer, folderName) =>
         stream.end(buffer);
     });
 
-
+/**
+ * ดึงข้อมูลรายละเอียดของสัตว์เลี้ยง สถิติ ประวัติสุขภาพ และกำหนดการนัดหมาย
+ */
 exports.getPetDetail = async (req, res) => {
     try {
         const petId = Number(req.params.petId);
         const ownerId = Number(req.query.ownerId);
         if (!petId || !ownerId) return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
 
-        //ประกาศตัวแปร clinicName ไว้ตรงนี้เพื่อป้องกัน Error
         const FIXED_CLINIC_ID = 2;
         const { data: clinicData } = await supabase
             .from("clinics")
@@ -237,7 +245,7 @@ exports.getPetDetail = async (req, res) => {
                 note: v.note,
                 weight: v.weight != null ? Number(v.weight) : null,
                 vet_name: fullName(vetMap[appt?.vet_id]) || null,
-                clinic_name: clinicName //ตอนนี้ใช้งานได้ปกติเพราะประกาศไว้ด้านบนแล้ว
+                clinic_name: clinicName
             };
         });
 
@@ -245,7 +253,6 @@ exports.getPetDetail = async (req, res) => {
             .filter((v) => v.weight !== null && v.weight !== undefined && Number(v.weight) > 0)
             .map((v) => ({ date: v.visit_date, weight: Number(v.weight) }));
 
-        // 2. นำน้ำหนักแรกรับในตาราง pets มาใส่เป็นจุดเริ่มต้น (ถ้ายังไม่มีบันทึกในวันลงทะเบียน)
         if (pet.weight !== null && pet.weight !== undefined && Number(pet.weight) > 0) {
             const initialDate = pet.created_at ? pet.created_at.slice(0, 10) : '2025-01-01';
 
@@ -255,7 +262,6 @@ exports.getPetDetail = async (req, res) => {
             }
         }
 
-        // 3. เรียงลำดับตามวันที่จาก อดีต -> ปัจจุบัน
         weightTrend.sort((a, b) => a.date.localeCompare(b.date));
 
         return res.status(200).json({
@@ -274,6 +280,9 @@ exports.getPetDetail = async (req, res) => {
 
 const SEX_VALUES = ["male", "female", "unknown"];
 
+/**
+ * อัปเดตข้อมูลรายละเอียดส่วนตัว สัญชาติ น้ำหนัก เพศ และรูปภาพของสัตว์เลี้ยง
+ */
 exports.updatePet = async (req, res) => {
     try {
         const petId = Number(req.params.pet_id);
@@ -389,12 +398,15 @@ exports.updatePet = async (req, res) => {
     }
 };
 
+/**
+ * ดึงข้อมูลสรุปภาพรวมสำหรับหน้าแดชบอร์ดหลักของแอปพลิเคชัน
+ */
 exports.getDashboardSummary = async (req, res) => {
     try {
         const ownerId = Number(req.params.owner_id);
         if (!ownerId) return res.status(400).json({ message: "ข้อมูลไม่ครบถ้วน" });
 
-        const FIXED_CLINIC_ID = 2; // รหัสคลินิกหลัก
+        const FIXED_CLINIC_ID = 2;
 
         const { data: pets, error: petsError } = await supabase
             .from("pets")
@@ -405,7 +417,6 @@ exports.getDashboardSummary = async (req, res) => {
         const petIds = pets.map(p => p.pet_id);
         const petMap = Object.fromEntries(pets.map(p => [p.pet_id, p.pet_name]));
 
-        // ดึงชื่อคลินิกหลัก
         const { data: clinicData } = await supabase
             .from("clinics")
             .select("clinic_name")
@@ -426,7 +437,6 @@ exports.getDashboardSummary = async (req, res) => {
         const pendingCount = appts.filter(a => a.status === "pending").length;
         const now = bangkokNow();
 
-        //1. นัดหมายล่วงหน้า: แสดงเฉพาะนัดที่ "ยืนยันแล้ว" (confirmed) และยังไม่ผ่านเวลาปัจจุบัน
         const upcoming = appts
             .filter(a => a.status === "confirmed" &&
                 (a.appointment_date > now.date || (a.appointment_date === now.date && a.appointment_time >= now.time)))
@@ -447,7 +457,6 @@ exports.getDashboardSummary = async (req, res) => {
             if (!visitError && visits && visits.length > 0) {
                 historyCount = visits.length;
 
-                //2. ดึงประวัติการรักษาล่าสุดมาแสดง "มากสุด 2 อัน"
                 const latestVisits = visits.slice(0, 2);
 
                 for (const latestVisit of latestVisits) {
@@ -461,13 +470,14 @@ exports.getDashboardSummary = async (req, res) => {
                             .eq("vet_id", appt.vet_id)
                             .maybeSingle();
                         if (vetData) {
-                            vetName = `น.สพ. ${vetData.first_name} ${vetData.last_name || ''}`.trim();
+                            // ใช้ชื่อ-นามสกุลโดยไม่ใส่คำนำหน้า
+                            vetName = `${vetData.first_name} ${vetData.last_name || ''}`.trim();
                         }
                     }
 
                     recentHistories.push({
                         ...latestVisit,
-                        pet_id: appt?.pet_id, // แนบ pet_id เพื่อใช้นำทางไปหน้าประวัติสัตว์เลี้ยง
+                        pet_id: appt?.pet_id,
                         pet_name: petMap[appt?.pet_id],
                         vet_name: vetName || 'ไม่ระบุสัตวแพทย์',
                         clinic_name: clinicName
@@ -481,7 +491,7 @@ exports.getDashboardSummary = async (req, res) => {
             pendingCount,
             historyCount,
             upcoming: upcoming ? { ...upcoming, pet_name: petMap[upcoming.pet_id], clinic_name: clinicName } : null,
-            recentHistories // ส่งออกเป็นอาเรย์สูงสุด 2 รายการ
+            recentHistories
         });
 
     } catch (error) {
@@ -490,6 +500,9 @@ exports.getDashboardSummary = async (req, res) => {
     }
 };
 
+/**
+ * รีเซ็ตและสร้างรหัส QR Code ใหม่สำหรับประจำตัวสัตว์เลี้ยง
+ */
 exports.resetQrCode = async (req, res) => {
     try {
         const petId = Number(req.params.pet_id);

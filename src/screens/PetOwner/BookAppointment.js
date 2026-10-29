@@ -38,16 +38,13 @@ export default function BookAppointment({ navigation, route }) {
 
   const [titleModalVisible, setTitleModalVisible] = useState(false);
   const [titleValue, setTitleValue] = useState(null);
+
+  // 4 บริการหลักของสัตวแพทย์
   const [titleItems] = useState([
     { label: 'ตรวจสุขภาพประจำปี (Health Checkup)', value: 'Health Checkup' },
     { label: 'ฉีดวัคซีน (Vaccination)', value: 'Vaccination' },
     { label: 'ตรวจรักษาอาการป่วย (Sick Visit / Consultation)', value: 'Sick Visit / Consultation' },
     { label: 'ทำหมัน (Spay / Neuter)', value: 'Spay / Neuter' },
-    { label: 'อาบน้ำตัดขน (Grooming)', value: 'Grooming' },
-    { label: 'อาบน้ำ (Bathing)', value: 'Bathing' },
-    { label: 'ตัดขน (Haircut)', value: 'Haircut' },
-    { label: 'ฝากเลี้ยง (Boarding)', value: 'Boarding' },
-    { label: 'อาบน้ำตัดขน / ฝากเลี้ยง (Grooming / Boarding)', value: 'Grooming / Boarding' },
   ]);
 
   const [note, setNote] = useState('');
@@ -327,13 +324,25 @@ export default function BookAppointment({ navigation, route }) {
         <View style={styles.textAreaWrapper}>
           <TextInput
             style={styles.textArea}
-            placeholder="ระบุอาการเบื้องต้น หรือความต้องการพิเศษ..."
+            placeholder="ระบุอาการเบื้องต้น หรือข้อมูลเพิ่มเติม..."
             placeholderTextColor="#94A3B8"
             value={note}
             onChangeText={setNote}
             multiline
             numberOfLines={4}
           />
+        </View>
+
+        {/* การ์ดคำแนะนำก่อนเข้ารับบริการ */}
+        <View style={styles.noticeCard}>
+          <View style={styles.noticeHeader}>
+            <Feather name="info" size={16} color="#0284C7" style={{ marginRight: 6 }} />
+            <Text style={styles.noticeTitle}>คำแนะนำก่อนเข้ารับบริการ</Text>
+          </View>
+          <Text style={styles.noticeText}>
+            • กรุณามาถึงคลินิกเพื่อ <Text style={styles.boldText}>เช็กอินยืนยันคิวก่อนเวลานัดอย่างน้อย 30 นาที</Text>{"\n"}
+            • หากมาถึงหลังเวลานัดหมาย คลินิกขออนุญาตจัดลำดับคิวเป็น <Text style={styles.boldText}>Walk-in</Text> เพื่อการให้บริการที่ตรงเวลาสำหรับเคสถัดไป
+          </Text>
         </View>
 
         <Text style={styles.footerText}>ทางคลินิกจะตรวจสอบและอนุมัติคำขอของคุณภายหลัง</Text>
@@ -454,7 +463,14 @@ const styles = StyleSheet.create({
 
   textAreaWrapper: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, paddingHorizontal: 12, backgroundColor: '#FFF' },
   textArea: { height: 90, textAlignVertical: 'top', paddingTop: 10, fontSize: 14, color: '#1E293B' },
-  footerText: { fontSize: 12, color: '#64748B', marginTop: 16, textAlign: 'center' },
+
+  noticeCard: { backgroundColor: '#F0F9FF', borderWidth: 1, borderColor: '#BAE6FD', borderRadius: 12, padding: 12, marginTop: 16 },
+  noticeHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  noticeTitle: { fontSize: 13, fontWeight: 'bold', color: '#0369A1' },
+  noticeText: { fontSize: 12, color: '#0C4A6E', lineHeight: 18 },
+  boldText: { fontWeight: 'bold' },
+
+  footerText: { fontSize: 12, color: '#64748B', marginTop: 14, textAlign: 'center' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.4)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContainer: { backgroundColor: '#FFF', borderRadius: 16, width: '100%', maxHeight: '70%', paddingVertical: 14, paddingHorizontal: 12 },
