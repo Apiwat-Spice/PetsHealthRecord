@@ -164,6 +164,17 @@ export default function AppointmentDetail({ navigation, route }) {
           </View>
         )}
 
+        {/* แสดงข้อมูลการเปลี่ยนแปลงนัดหมาย หากมีข้อมูล status_detail และไม่ใช่นัดหมายที่ยกเลิก */}
+        {detailData?.status !== 'cancelled' && detailData?.status_detail ? (
+          <View style={styles.rescheduleCard}>
+            <View style={styles.rescheduleTitleRow}>
+              <Feather name="edit-3" size={16} color="#B45309" style={{ marginRight: 8 }} />
+              <Text style={styles.rescheduleTitle}>การเปลี่ยนแปลงวัน/เวลานัดหมาย</Text>
+            </View>
+            <Text style={styles.rescheduleText}>{detailData.status_detail}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.sectionCard}>
           <View style={styles.sectionTitleContainer}>
             <Feather name="file-text" size={16} color="#2C4A6F" style={styles.sectionIcon} />
@@ -299,6 +310,12 @@ const styles = StyleSheet.create({
   apptTimeText: { fontSize: 22, fontWeight: 'bold', color: '#1E293B' },
   timeNote: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
   timeDivider: { width: 1, height: '70%', backgroundColor: '#E2E8F0' },
+
+  // การ์ดแจ้งเตือนเปลี่ยนแปลงนัดหมาย
+  rescheduleCard: { backgroundColor: '#FFFBEB', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#FCD34D' },
+  rescheduleTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
+  rescheduleTitle: { fontSize: 13, fontWeight: 'bold', color: '#B45309' },
+  rescheduleText: { fontSize: 13, color: '#92400E', lineHeight: 19, fontWeight: '500' },
 
   sectionCard: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: '#E2EBF2' },
   sectionTitleContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingBottom: 8 },
