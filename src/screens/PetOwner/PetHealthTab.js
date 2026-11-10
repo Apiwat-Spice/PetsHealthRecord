@@ -107,7 +107,7 @@ export default function PetHealthTab({ weightTrend, stats, history = [], navigat
           </ScrollView>
         </View>
 
-        {/* แสดงผลรายการประวัติแบบ Timeline ที่เส้นเชื่อมต่อกัน */}
+        {/* แสดงผลรายการประวัติแบบ Timeline */}
         {filteredHistory.length === 0 ? (
           <Text style={styles.emptyText}>ไม่พบประวัติการรักษาในหมวดหมู่นี้</Text>
         ) : (
@@ -182,7 +182,7 @@ export default function PetHealthTab({ weightTrend, stats, history = [], navigat
                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <View style={styles.vetBadge}>
                         <Text style={styles.vetBadgeText}>
-                          {h.vet_name ? `น.สพ. ${h.vet_name}` : 'คลินิกรักษาสัตว์'}
+                          {h.vet_name ? h.vet_name : 'ไม่ระบุสัตวแพทย์'}
                         </Text>
                       </View>
                       <Feather name="chevron-right" size={16} color="#0056D2" style={{ marginLeft: 4 }} />
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#E2EBF0',
+    borderColor: '#E2E8F0',
     elevation: 1,
   },
   chartTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },

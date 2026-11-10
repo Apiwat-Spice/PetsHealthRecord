@@ -84,13 +84,13 @@ exports.getAppointmentById = async (req, res) => {
         const { id } = req.params;
         const FIXED_CLINIC_ID = 2;
 
+        // 1. ดึงข้อมูลนัดหมาย สัตว์เลี้ยง และสัตวแพทย์
         const { data: appointment, error: appError } = await supabase
             .from("appointments")
             .select(`
                 *,
                 pets(pet_name, animal_type),
-                vets(first_name, last_name),
-                clinic_staff(first_name, last_name)
+                vets(first_name, last_name, profile_image_url)
             `)
             .eq("appointment_id", id)
             .single();
@@ -98,6 +98,19 @@ exports.getAppointmentById = async (req, res) => {
         if (appError) throw appError;
         if (!appointment) return res.status(404).json({ message: "ไม่พบข้อมูลการนัดหมายนี้" });
 
+        // 2. ดึงข้อมูลเจ้าหน้าที่ผู้บันทึกจาก visit_records (ถ้ามี)
+        let staffData = null;
+        const { data: visitRow } = await supabase
+            .from("visit_records")
+            .select("clinic_staff(first_name, last_name, profile_image_url)")
+            .eq("appointment_id", id)
+            .maybeSingle();
+
+        if (visitRow?.clinic_staff) {
+            staffData = visitRow.clinic_staff;
+        }
+
+        // 3. ดึงข้อมูลคลินิก
         const { data: clinicData } = await supabase
             .from("clinics")
             .select("clinic_name, phone")
@@ -108,11 +121,12 @@ exports.getAppointmentById = async (req, res) => {
             clinic_name: clinicData?.clinic_name || 'คลินิกรักษาสัตว์',
             phone: clinicData?.phone || ''
         };
+        appointment.clinic_staff = staffData;
 
         return res.status(200).json(appointment);
     } catch (error) {
         console.error("Get Detail Error:", error);
-        return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์" });
+        return res.status(500).json({ message: "เกิดข้อผิดพลาดจากเซิร์ฟเวอร์", error: error.message });
     }
 };
 

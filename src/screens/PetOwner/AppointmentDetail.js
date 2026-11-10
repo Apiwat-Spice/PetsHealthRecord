@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator, Alert, Linking, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator, Alert, Linking, TouchableOpacity, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { API_URL } from '../../config';
@@ -127,6 +127,14 @@ export default function AppointmentDetail({ navigation, route }) {
   const statusInfo = getStatusInfo(detailData?.status);
   const checkInTime = getCheckInTime(detailData?.appointment_time);
 
+  const vetName = detailData?.vets?.first_name
+    ? `${detailData.vets.first_name} ${detailData.vets.last_name || ''}`.trim()
+    : 'ไม่ระบุสัตวแพทย์';
+
+  const staffName = detailData?.clinic_staff?.first_name
+    ? `${detailData.clinic_staff.first_name} ${detailData.clinic_staff.last_name || ''}`.trim()
+    : 'เจ้าหน้าที่คลินิก';
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
@@ -164,7 +172,6 @@ export default function AppointmentDetail({ navigation, route }) {
           </View>
         )}
 
-        {/* แสดงข้อมูลการเปลี่ยนแปลงนัดหมาย หากมีข้อมูล status_detail และไม่ใช่นัดหมายที่ยกเลิก */}
         {detailData?.status !== 'cancelled' && detailData?.status_detail ? (
           <View style={styles.rescheduleCard}>
             <View style={styles.rescheduleTitleRow}>
@@ -224,28 +231,43 @@ export default function AppointmentDetail({ navigation, route }) {
           </View>
         </View>
 
+        {/* ส่วนแสดงบุคลากรผู้ดูแล (พร้อมรูปโปรไฟล์วงกลมขนาด 40px) */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionTitleContainer}>
             <Feather name="users" size={16} color="#2C4A6F" style={styles.sectionIcon} />
             <Text style={styles.sectionTitle}>ผู้รับผิดชอบเคส</Text>
           </View>
 
-          <View style={styles.rowItem}>
-            <Text style={styles.label}>สัตวแพทย์</Text>
-            <Text style={styles.value}>
-              {detailData?.vets?.first_name
-                ? `${detailData.vets.first_name} ${detailData.vets.last_name || ''}`.trim()
-                : '-'}
-            </Text>
+          {/* สัตวแพทย์ */}
+          <View style={styles.personRow}>
+            <View style={styles.avatarCircle}>
+              {detailData?.vets?.profile_image_url ? (
+                <Image source={{ uri: detailData.vets.profile_image_url }} style={styles.avatarImage} />
+              ) : (
+                <Feather name="user" size={18} color="#0056D2" />
+              )}
+            </View>
+            <View style={styles.personInfo}>
+              <Text style={styles.personRoleLabel}>สัตวแพทย์ผู้ตรวจ</Text>
+              <Text style={styles.personNameText}>{vetName}</Text>
+            </View>
           </View>
 
-          <View style={styles.rowItem}>
-            <Text style={styles.label}>เจ้าหน้าที่บันทึก</Text>
-            <Text style={styles.value}>
-              {detailData?.clinic_staff?.first_name
-                ? `${detailData.clinic_staff.first_name} ${detailData.clinic_staff.last_name || ''}`.trim()
-                : '-'}
-            </Text>
+          <View style={styles.personDivider} />
+
+          {/* เจ้าหน้าที่จัดการนัดหมาย */}
+          <View style={styles.personRow}>
+            <View style={[styles.avatarCircle, { backgroundColor: '#F1F5F9' }]}>
+              {detailData?.clinic_staff?.profile_image_url ? (
+                <Image source={{ uri: detailData.clinic_staff.profile_image_url }} style={styles.avatarImage} />
+              ) : (
+                <Feather name="user-check" size={18} color="#64748B" />
+              )}
+            </View>
+            <View style={styles.personInfo}>
+              <Text style={styles.personRoleLabel}>เจ้าหน้าที่ผู้บันทึกข้อมูล</Text>
+              <Text style={styles.personNameText}>{staffName}</Text>
+            </View>
           </View>
         </View>
 
@@ -311,7 +333,6 @@ const styles = StyleSheet.create({
   timeNote: { fontSize: 10, color: '#94A3B8', marginTop: 2 },
   timeDivider: { width: 1, height: '70%', backgroundColor: '#E2E8F0' },
 
-  // การ์ดแจ้งเตือนเปลี่ยนแปลงนัดหมาย
   rescheduleCard: { backgroundColor: '#FFFBEB', borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: '#FCD34D' },
   rescheduleTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },
   rescheduleTitle: { fontSize: 13, fontWeight: 'bold', color: '#B45309' },
@@ -334,6 +355,26 @@ const styles = StyleSheet.create({
 
   detailBox: { backgroundColor: '#F8FAFC', width: '100%', padding: 12, borderRadius: 10, marginTop: 6, borderWidth: 1, borderColor: '#F1F5F9' },
   detailText: { fontSize: 13, color: '#334155', lineHeight: 18 },
+
+  // สไตล์วงกลมและข้อมูลโปรไฟล์บุคลากร (Avatar Size: 40x40 px)
+  personRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  avatarCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#EBF3FA',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    overflow: 'hidden'
+  },
+  avatarImage: { width: '100%', height: '100%' },
+  personInfo: { flex: 1 },
+  personRoleLabel: { fontSize: 11, color: '#64748B', fontWeight: '500' },
+  personNameText: { fontSize: 13, color: '#1E293B', fontWeight: 'bold', marginTop: 1 },
+  personDivider: { height: 1, backgroundColor: '#F8FAFC', marginVertical: 10 },
 
   guidanceCard: { backgroundColor: '#F0F9FF', borderRadius: 16, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#BAE6FD' },
   guidanceTitleRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 6 },

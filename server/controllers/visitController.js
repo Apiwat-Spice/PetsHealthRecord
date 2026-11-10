@@ -91,12 +91,14 @@ exports.getVisitDetailById = async (req, res) => {
           appointment_time,
           vets (
             first_name,
-            last_name
+            last_name,
+            profile_image_url
           )
         ),
         clinic_staff (
           first_name,
-          last_name
+          last_name,
+          profile_image_url
         )
       `)
       .eq("visit_id", id)
@@ -125,9 +127,11 @@ exports.getVisitDetailById = async (req, res) => {
       vet_name: data.appointments?.vets
         ? `${data.appointments.vets.first_name} ${data.appointments.vets.last_name || ''}`.trim()
         : null,
+      vet_image_url: data.appointments?.vets?.profile_image_url || null,
       staff_name: data.clinic_staff
         ? `${data.clinic_staff.first_name} ${data.clinic_staff.last_name || ''}`.trim()
-        : null
+        : null,
+      staff_image_url: data.clinic_staff?.profile_image_url || null
     };
 
     return res.status(200).json(formattedData);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, ScrollView, Pressable, ActivityIndicator, Alert, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { API_URL } from '../../config';
 
 export default function VisitDetail({ navigation, route }) {
@@ -15,7 +15,6 @@ export default function VisitDetail({ navigation, route }) {
 
     const fetchVisitDetail = async () => {
         try {
-            // ดึงข้อมูลประวัติการรักษาพร้อมเชื่อมโยงตาราง appointments และ vets
             const response = await fetch(`${API_URL}/visit-records/${visitId}`);
             if (response.ok) {
                 const data = await response.json();
@@ -49,9 +48,16 @@ export default function VisitDetail({ navigation, route }) {
         }
     };
 
+    const vetDisplayName = visitData?.vet_name || (visitData?.vets?.first_name
+        ? `${visitData.vets.first_name} ${visitData.vets.last_name || ''}`.trim()
+        : 'ไม่ระบุรายชื่อสัตวแพทย์');
+
+    const staffDisplayName = visitData?.staff_name || (visitData?.clinic_staff?.first_name
+        ? `${visitData.clinic_staff.first_name} ${visitData.clinic_staff.last_name || ''}`.trim()
+        : 'เจ้าหน้าที่คลินิก');
+
     return (
         <SafeAreaView style={styles.container}>
-            {/* Header */}
             <View style={styles.header}>
                 <Pressable onPress={() => navigation.goBack()} style={styles.backButton}>
                     <Feather name="arrow-left" size={24} color="#FFF" />
@@ -61,7 +67,7 @@ export default function VisitDetail({ navigation, route }) {
 
             <ScrollView contentContainerStyle={styles.contentContainer}>
 
-                {/* ส่วนที่ 1: ข้อมูลทั่วไปการเข้ารับบริการ */}
+                {/* ส่วนที่ 1: ข้อมูลทั่วไป */}
                 <View style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>ข้อมูลการเข้ารับบริการ</Text>
 
@@ -81,7 +87,7 @@ export default function VisitDetail({ navigation, route }) {
                     </View>
                 </View>
 
-                {/* ส่วนที่ 2: ผลการตรวจและวินิจฉัย (จาก Visit Record) */}
+                {/* ส่วนที่ 2: ผลการตรวจและวินิจฉัย */}
                 <View style={styles.sectionCard}>
                     <Text style={styles.sectionTitle}>ผลการตรวจวินิจฉัย</Text>
 
@@ -106,17 +112,40 @@ export default function VisitDetail({ navigation, route }) {
                     </View>
                 </View>
 
-                {/* ส่วนที่ 3: บุคลากรผู้ดูแล */}
+                {/* ส่วนที่ 3: บุคลากรผู้ดูแล (พร้อม Avatar ขนาด 40px) */}
                 <View style={styles.sectionCard}>
-                    <Text style={styles.sectionTitle}>สัตวแพทย์ผู้ทำการรักษา</Text>
+                    <Text style={styles.sectionTitle}>ผู้รับผิดชอบเคส</Text>
 
-                    <View style={styles.rowItem}>
-                        <Text style={styles.label}>สัตวแพทย์</Text>
-                        <Text style={styles.value}>
-                            {visitData?.vets?.first_name
-                                ? `น.สพ. ${visitData.vets.first_name} ${visitData.vets.last_name || ''}`
-                                : 'ไม่ระบุรายชื่อสัตวแพทย์'}
-                        </Text>
+                    {/* สัตวแพทย์ */}
+                    <View style={styles.personRow}>
+                        <View style={styles.avatarCircle}>
+                            {visitData?.vet_image_url ? (
+                                <Image source={{ uri: visitData.vet_image_url }} style={styles.avatarImage} />
+                            ) : (
+                                <Feather name="user" size={18} color="#0056D2" />
+                            )}
+                        </View>
+                        <View style={styles.personInfo}>
+                            <Text style={styles.personRoleLabel}>สัตวแพทย์ผู้ทำการรักษา</Text>
+                            <Text style={styles.personNameText}>{vetDisplayName}</Text>
+                        </View>
+                    </View>
+
+                    <View style={styles.personDivider} />
+
+                    {/* เจ้าหน้าที่ผู้บันทึกข้อมูล */}
+                    <View style={styles.personRow}>
+                        <View style={[styles.avatarCircle, { backgroundColor: '#F1F5F9' }]}>
+                            {visitData?.staff_image_url ? (
+                                <Image source={{ uri: visitData.staff_image_url }} style={styles.avatarImage} />
+                            ) : (
+                                <Feather name="user-check" size={18} color="#64748B" />
+                            )}
+                        </View>
+                        <View style={styles.personInfo}>
+                            <Text style={styles.personRoleLabel}>เจ้าหน้าที่ผู้บันทึกข้อมูล</Text>
+                            <Text style={styles.personNameText}>{staffDisplayName}</Text>
+                        </View>
                     </View>
                 </View>
 
@@ -142,5 +171,25 @@ const styles = StyleSheet.create({
 
     blockItem: { marginBottom: 14 },
     subLabel: { fontSize: 13, fontWeight: '600', color: '#0056D2', marginBottom: 4 },
-    blockValue: { fontSize: 13, color: '#333', backgroundColor: '#F8FBFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#EAF4F4', lineHeight: 18 }
+    blockValue: { fontSize: 13, color: '#333', backgroundColor: '#F8FBFF', padding: 10, borderRadius: 8, borderWidth: 1, borderColor: '#EAF4F4', lineHeight: 18 },
+
+    // สไตล์ วงกลมรูปบุคลากร (Avatar 40px)
+    personRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+    avatarCircle: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: '#EBF3FA',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+        overflow: 'hidden'
+    },
+    avatarImage: { width: '100%', height: '100%' },
+    personInfo: { flex: 1 },
+    personRoleLabel: { fontSize: 11, color: '#666', fontWeight: '500' },
+    personNameText: { fontSize: 13, color: '#333', fontWeight: 'bold', marginTop: 1 },
+    personDivider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 10 }
 });
